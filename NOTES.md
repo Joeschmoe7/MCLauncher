@@ -1,4 +1,4 @@
-# MediaCenter — Engineering Notes
+# MCLauncher — Engineering Notes
 
 _Consolidated 2026-07-26 from five overlapping documents (`SONNET_GUIDE.md`,
 `ICON_OPACITY_BUG_INVESTIGATION.md`, `SCROLL_SMOOTHNESS_INVESTIGATION.md`,
@@ -20,6 +20,13 @@ wrong turns were taken repeatedly.
 - No network, no analytics, minimal dependencies — the box is slow and the APK should stay small.
 - Package: `com.wmc.mediacenter` (release) / `com.wmc.mediacenter.debug` (debug).
   **Using the wrong one with `adb` fails silently.** This cost several confusing rounds.
+
+> **Naming:** the app was renamed **MediaCenter → MCLauncher** on 2026-07-26, but only the
+> *display* name, Gradle project, theme and Compose symbols changed. The **`applicationId` and
+> Kotlin package deliberately stay `com.wmc.mediacenter`** — changing them makes Android treat
+> it as a brand-new app, which wipes the saved rows and settings (DataStore is per-package),
+> leaves the old copy installed, and drops the preferred-Home record. So the on-screen name and
+> the package name differ on purpose; every `adb` command still uses `com.wmc.mediacenter`.
 
 ### Device quirks
 
@@ -77,7 +84,7 @@ Caveats found the hard way:
 ## 2. Architecture
 
 ```
-MainActivity ──> MediaCenterApp (in-memory screen switch, context menus, confirm dialogs)
+MainActivity ──> MCLauncherApp (in-memory screen switch, context menus, confirm dialogs)
                       │
                       ├── HomeScreen        rows of tiles; owns the scroll follower
                       ├── AllAppsScreen     5-column grid
@@ -109,7 +116,7 @@ serialized to JSON in DataStore Preferences. `AppInfo` carries pre-decoded `Imag
 `recentPackages`.
 
 Adding one means touching, in order: `AppSettings` → `SettingsRepository` (key + read + setter)
-→ `MainViewModel` → `SettingsScreen` row → wire the lambda at the `MediaCenterApp` call site.
+→ `MainViewModel` → `SettingsScreen` row → wire the lambda at the `MCLauncherApp` call site.
 
 ---
 

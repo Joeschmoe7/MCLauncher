@@ -18,7 +18,7 @@ private val WmcColorScheme = darkColorScheme(
 )
 
 @Composable
-fun MediaCenterTheme(content: @Composable () -> Unit) {
+fun MCLauncherTheme(content: @Composable () -> Unit) {
     // S9 — Selawik (Segoe UI stand-in) from assets when present, platform
     // sans-serif otherwise. Resolved once; see Type.kt for install steps.
     val context = LocalContext.current

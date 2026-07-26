@@ -33,7 +33,7 @@ import com.wmc.mediacenter.ui.theme.WmcTileSurface
  * Minimal Settings, per spec: clock format, app-name labels, re-run
  * first-time setup, version info. Toggles persist immediately.
  * "Re-run first-time setup" is destructive (wipes custom rows), so its
- * confirmation is handled one level up in MediaCenterApp, same pattern
+ * confirmation is handled one level up in MCLauncherApp, same pattern
  * as deleting a row.
  */
 @Composable

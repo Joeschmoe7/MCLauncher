@@ -1,4 +1,4 @@
-# MediaCenter — a Windows Media Center launcher for Android TV
+# MCLauncher — a Windows Media Center launcher for Android TV
 
 A custom Android TV home launcher styled after **Windows Media Center** (Windows 7 era):
 a vertical stack of horizontal app "strips," where the focused strip glides to a fixed line
@@ -35,10 +35,10 @@ access, no analytics.
 2. Get it onto the box — **Send Files to TV** (Play Store, install on phone + TV) is the easiest
    route, or `adb install app-release.apk`.
 3. Open the file on the TV to install it.
-4. Press **Home** → Android asks which launcher to use → pick **MediaCenter → Always**.
+4. Press **Home** → Android asks which launcher to use → pick **MCLauncher → Always**.
    - If no chooser appears (some firmware), sideload **Launcher Manager** and set it there.
 5. **Escape hatch:** the launcher's own "Google TV Home" tile switches back, and
-   *Settings → Apps → MediaCenter → clear defaults* always works.
+   *Settings → Apps → MCLauncher → clear defaults* always works.
 
 ---
 
@@ -47,8 +47,8 @@ access, no analytics.
 You need [Android Studio](https://developer.android.com/studio) — it bundles the JDK and SDK.
 
 ```bash
-git clone <repo>
-cd "Media Center Launcher"
+git clone https://github.com/Joeschmoe7/MCLauncher.git
+cd MCLauncher
 ./gradlew :app:assembleRelease        # Windows: gradlew.bat :app:assembleRelease
 ```
 
@@ -79,6 +79,10 @@ rows will look sparse — use the real box for anything about performance or rea
 ---
 
 ## Project layout
+
+> The Kotlin package is `com.wmc.mediacenter` rather than `mclauncher` — the app was renamed
+> after release, and changing the `applicationId` would make Android treat it as a new app,
+> wiping saved rows and settings on every existing install. Cosmetic mismatch, deliberate.
 
 ```
 app/src/main/java/com/wmc/mediacenter/

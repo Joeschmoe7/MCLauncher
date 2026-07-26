@@ -19,7 +19,7 @@ import com.wmc.mediacenter.ui.components.AppTile
  * Every installed launchable app, alphabetical, 5 columns, same tile
  * styling as the home rows — "search" is just scrolling, per spec.
  * Reached from the system row; Back returns Home (handled one level up,
- * in MediaCenterApp). Long-press OK on a tile opens "Add to row →".
+ * in MCLauncherApp). Long-press OK on a tile opens "Add to row →".
  */
 @Composable
 fun AllAppsScreen(
