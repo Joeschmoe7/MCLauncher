@@ -58,7 +58,10 @@ import com.wmc.mediacenter.ui.theme.WmcAccentCyan
 import com.wmc.mediacenter.ui.theme.WmcTextPrimary
 import kotlin.math.max
 
-private val TileWidth = 220.dp
+// S24 — INTERNAL, not private: HomeScreen derives the strip's cursor-slot
+// position (RowCursorSlotStart) from this width. Duplicating the number there
+// would silently break the WMC lead-in slot the first time a tile is resized.
+internal val TileWidth = 220.dp
 private val TileHeight = 130.dp
 private val TileCornerRadius = 8.dp
 private const val TileFocusScale = 1.12f
