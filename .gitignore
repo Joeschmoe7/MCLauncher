@@ -1,0 +1,21 @@
+# Build output
+# NOTE: "build/" not "/build" — the old pattern was root-anchored and therefore
+# missed app/build/, which is where nearly all the output actually lands.
+build/
+*.iml
+.externalNativeBuild
+.cxx
+/captures
+
+# Tooling / machine-specific
+.gradle/
+.kotlin/
+/.idea
+local.properties
+.DS_Store
+
+# Diagnostics — screen captures and artwork dumps used while investigating
+# rendering and frame timing (see NOTES.md §7). Useful to produce, never to commit.
+*.mp4
+/art/
+/home.png

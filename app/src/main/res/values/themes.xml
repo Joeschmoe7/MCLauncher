@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Platform theme for the activity chrome around the Compose content.
+         DeviceDefault keeps this dependency-free (no AppCompat/Material
+         components library needed just for a themed window). -->
+    <style name="Theme.MediaCenter" parent="android:Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:navigationBarColor">@android:color/black</item>
+        <item name="android:statusBarColor">@android:color/black</item>
+        <item name="android:windowIsTranslucent">false</item>
+    </style>
+</resources>
