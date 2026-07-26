@@ -121,7 +121,7 @@ private data class HomeRowItem(
  * Home) are now ordinary cards inside the default, editable "Settings" row
  * — clicking one dispatches to its action instead of launching a package.
  * Long-press OK on a tile opens the Move/Remove/App-info context menu
- * (handled one level up, in MediaCenterApp).
+ * (handled one level up, in MCLauncherApp).
  *
  * S2/S3 — WMC's signature "cross" navigation: strips stack vertically and
  * the focused strip glides to the vertical center of the screen, with
@@ -510,7 +510,7 @@ private fun RowChevron(symbol: String, modifier: Modifier = Modifier) {
 /**
  * "Google TV Home" no longer switches launchers instantly on click — it's
  * the one accidental-exit risk left once Back is fully safe (see
- * MediaCenterApp's BackHandler), so [onGoogleTvHome] routes it through a
+ * MCLauncherApp's BackHandler), so [onGoogleTvHome] routes it through a
  * Cancel/Switch confirm overlay one level up instead, matching Delete Row /
  * Reset Setup.
  */

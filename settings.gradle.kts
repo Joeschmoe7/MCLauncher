@@ -17,5 +17,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "MediaCenter"
+rootProject.name = "MCLauncher"
 include(":app")

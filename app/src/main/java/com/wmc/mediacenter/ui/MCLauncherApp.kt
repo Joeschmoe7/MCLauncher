@@ -44,7 +44,7 @@ import com.wmc.mediacenter.ui.components.TextInputDialog
  * back from slightly small — Media Center's section-entry feel.
  */
 @Composable
-fun MediaCenterApp(viewModel: MainViewModel) {
+fun MCLauncherApp(viewModel: MainViewModel) {
     val uiState by viewModel.uiState.collectAsState()
     val allApps by viewModel.apps.collectAsState()
     val settings by viewModel.settings.collectAsState()
