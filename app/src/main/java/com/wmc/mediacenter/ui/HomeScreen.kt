@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -38,6 +39,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.MaterialTheme
@@ -48,6 +50,7 @@ import com.wmc.mediacenter.apps.SystemActions
 import com.wmc.mediacenter.data.AppSettings
 import com.wmc.mediacenter.data.ShortcutConfig
 import com.wmc.mediacenter.ui.components.AppTile
+import com.wmc.mediacenter.ui.components.TileWidth
 import com.wmc.mediacenter.ui.components.HomeHeader
 import com.wmc.mediacenter.ui.theme.WmcTextPrimary
 import kotlin.math.roundToInt
@@ -103,6 +106,32 @@ private const val FollowerStiffness = 550f
 // removes any overshoot/momentum bounce at the cost of a marginally softer
 // finish.
 private const val FollowerDampingRatio = 1.25f
+
+/**
+ * S24 — HORIZONTAL CURSOR SLOT. The fixed-cursor carousel (S9/S10, see
+ * `anchorSpec` below) was already correct in kind — the row slides, the
+ * highlight holds still — but the cursor sat at 48.dp, the same value as the
+ * strip's leading content padding. Item 0 therefore rested exactly ON the
+ * cursor with nothing to its left, and every card you scrolled past
+ * disappeared off the screen edge. Real WMC keeps the highlight one slot IN,
+ * so the card you just came from stays visible as context.
+ *
+ * THREE NUMBERS MUST AGREE or the illusion breaks:
+ *   1. [RowCursorSlotStart]  — where the focused tile is pinned (anchorSpec).
+ *   2. LazyRow `start` padding — MUST equal it, so item 0 rests on the cursor
+ *      at scroll 0 with an empty lead-in slot to its left.
+ *   3. LazyRow `end` padding — must be big enough that the LAST tile can still
+ *      scroll all the way to the cursor, or the highlight starts drifting
+ *      rightward at the end of a row and breaks its own rule.
+ *
+ * This is a LAYOUT change only. It does not touch the vertical follower,
+ * [NoFocusScrollSpec], or the LazyColumn, and it does not change how OFTEN a
+ * horizontal scroll animation runs — only where it comes to rest. Vertical
+ * scroll smoothness is unaffected by construction.
+ */
+private val RowEdgePadding = 48.dp
+private val RowTileSpacing = 16.dp
+private val RowCursorSlotStart = RowEdgePadding + TileWidth + RowTileSpacing // 284.dp
 
 /** One entry in Home's row list — either the derived Recent row (F4) or a user RowConfig. */
 private data class HomeRowItem(
@@ -180,6 +209,10 @@ fun HomeScreen(
 
         BoxWithConstraints(modifier = Modifier.weight(1f)) {
             val viewportPx = with(LocalDensity.current) { maxHeight.toPx() }
+            // S24 — free: this BoxWithConstraints already exists for the
+            // follower's viewport height. The rows are full-bleed items in the
+            // LazyColumn, so its maxWidth IS each strip's viewport width.
+            val rowViewportWidth = maxWidth
 
             // S10 — the vertical list must NEVER react to focus
             // bring-into-view: the centering effect below owns vertical
@@ -208,6 +241,7 @@ fun HomeScreen(
                         fadedTiles = settings.fadedTiles,
                         preferIconTiles = settings.preferIconTiles,
                         isRowFocused = isRowFocused,
+                        rowViewportWidth = rowViewportWidth,
                         modifier = Modifier
                             .onFocusChanged { state -> if (state.hasFocus) focusedRowIndex = rowIndex },
                         firstTileFocusRequester = if (rowIndex == 0) firstTileFocusRequester else null,
@@ -335,6 +369,12 @@ private fun AppRow(
     preferIconTiles: Boolean,
     isRowFocused: Boolean,
     defaultBringIntoViewSpec: BringIntoViewSpec,
+    // S24 — width of the strip's viewport, needed to size the trailing padding
+    // that lets the last tile reach the cursor. Passed down from HomeScreen's
+    // existing BoxWithConstraints rather than measured here: a per-row
+    // BoxWithConstraints would add a subcomposition to every row on every
+    // frame the follower scrolls, which is exactly the cost we can't afford.
+    rowViewportWidth: Dp,
     modifier: Modifier = Modifier,
     firstTileFocusRequester: FocusRequester? = null,
     onLongPressTile: (index: Int, app: AppInfo) -> Unit,
@@ -389,12 +429,29 @@ private fun AppRow(
         val density = LocalDensity.current
         val anchorSpec = remember(density) {
             object : BringIntoViewSpec {
-                private val anchorPx = with(density) { 48.dp.toPx() }
+                // S24 — one slot in from the edge, not at it. Must stay equal
+                // to the LazyRow's start padding below.
+                private val anchorPx = with(density) { RowCursorSlotStart.toPx() }
                 override val scrollAnimationSpec: AnimationSpec<Float> =
                     tween(durationMillis = 280, easing = FastOutSlowInEasing)
 
                 override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float =
                     offset - anchorPx
+            }
+        }
+
+        // S24 — the trailing padding is wide enough for the last tile to reach
+        // the cursor, which means `canScrollForward` stays TRUE after it gets
+        // there (there is still empty padding left to scroll into). On its own
+        // that would pin the › chevron on permanently at the end of every row.
+        // Hide it once the last tile is home.
+        val cursorPx = with(density) { RowCursorSlotStart.roundToPx() }
+        val lastTileAtCursor by remember(rowListState, apps.size, cursorPx) {
+            derivedStateOf {
+                val info = rowListState.layoutInfo
+                val last = info.visibleItemsInfo.lastOrNull()
+                last != null && last.index == apps.lastIndex &&
+                    (last.offset - info.viewportStartOffset) <= cursorPx
             }
         }
 
@@ -421,8 +478,24 @@ private fun AppRow(
                 // room to draw — the strip now clips (collapse + offscreen
                 // edge-fade compositing), which was cutting off the top of
                 // the scaled highlighted card.
-                contentPadding = PaddingValues(horizontal = 48.dp, vertical = 14.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                // S24 — classic mode uses the cursor-slot geometry: start
+                // padding == the anchor (item 0 rests on the cursor, lead-in
+                // slot empty to its left), end padding big enough that the
+                // LAST tile can still travel to the cursor. Non-classic mode
+                // uses the default bring-into-view spec, so it keeps the plain
+                // symmetric edges — mixing the two would leave a 284dp hole.
+                contentPadding = if (classicStrips) {
+                    PaddingValues(
+                        start = RowCursorSlotStart,
+                        end = (rowViewportWidth - RowCursorSlotStart - TileWidth)
+                            .coerceAtLeast(RowEdgePadding),
+                        top = 14.dp,
+                        bottom = 14.dp
+                    )
+                } else {
+                    PaddingValues(horizontal = RowEdgePadding, vertical = 14.dp)
+                },
+                horizontalArrangement = Arrangement.spacedBy(RowTileSpacing),
                 modifier = Modifier
                     .graphicsLayer {
                         // S15 — tile opacity is GATED, not linear in expansion.
@@ -478,7 +551,7 @@ private fun AppRow(
             if (isRowFocused && rowListState.canScrollBackward) {
                 RowChevron(symbol = "‹", modifier = Modifier.align(Alignment.CenterStart))
             }
-            if (isRowFocused && rowListState.canScrollForward) {
+            if (isRowFocused && rowListState.canScrollForward && !lastTileAtCursor) {
                 RowChevron(symbol = "›", modifier = Modifier.align(Alignment.CenterEnd))
             }
         }
