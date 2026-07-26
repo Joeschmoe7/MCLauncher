@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Simple "row of tiles" mark, kept inside the 66dp adaptive-icon safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M28,41 h18 v26 h-18 z"
+        android:fillColor="#4FC3F7" />
+    <path
+        android:pathData="M50,41 h18 v26 h-18 z"
+        android:fillColor="#1273B0" />
+    <path
+        android:pathData="M72,41 h10 v26 h-10 z"
+        android:fillColor="#4FC3F7" />
+</vector>
