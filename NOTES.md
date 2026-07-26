@@ -34,6 +34,44 @@ wrong turns were taken repeatedly.
 - `/sdcard/Android/data/<pkg>/` is reachable by `adb pull`, but only under the **real** package
   name, and `run-as` only works on debuggable builds.
 
+### ⚠️ Re-run `set-home-activity` after EVERY install
+
+**This is the one to remember.** Installing a new build clears the preferred-Home record, and
+the launcher silently stops being Home — it looks intermittent and random, but it isn't.
+
+Google TV Home (`com.google.android.apps.tv.launcherx`) declares its HOME intent filter with
+**`priority=2`**; ours is the standard priority 0. So with no preferred-activity record to break
+the tie, Android doesn't show a chooser — it just picks the highest priority and falls back to
+Google TV Home. That is why the symptom is "it doesn't always launch on startup."
+
+```bash
+# after every install that matters:
+adb shell cmd package set-home-activity com.wmc.mediacenter/.MainActivity
+
+# verify — you want com.wmc.mediacenter.MainActivity, NOT launcherx:
+adb shell cmd package resolve-activity --user 0 \
+    -c android.intent.category.HOME -a android.intent.action.MAIN | grep name=
+
+# what the system actually has on record:
+adb shell dumpsys package preferred-activities | grep -i -A3 HOME
+```
+
+Caveats found the hard way:
+
+- `set-home-activity` can print **`Success` while changing nothing** — always verify, don't
+  trust the return. If it reports success but `resolve-activity` still shows `launcherx`, add
+  `--user 0` to both commands, and check `dumpsys package preferred-activities`.
+- The ground truth is simply **pressing Home on the remote**. Trust that over any adb output.
+- A **firmware OTA** can re-assert Google TV Home. Nothing the app can do about it.
+- There is no code-level fix. Android deliberately requires the user to choose the Home app;
+  no manifest flag or permission can claim it.
+- Other installed launchers compete for the same slot. This box also has **Projectivy Launcher**
+  (`com.spocky.projengmenu`), which declares HOME too and includes a launcher-manager screen
+  that can set the default without adb — a useful fallback when `set-home-activity` won't stick.
+- Debug and release are **separate packages** (`com.wmc.mediacenter.debug` vs
+  `com.wmc.mediacenter`) and both declare HOME. Keeping only one installed removes a whole class
+  of confusion.
+
 ---
 
 ## 2. Architecture
