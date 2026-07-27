@@ -2,8 +2,10 @@ package com.wmc.mediacenter.ui
 
 import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -15,7 +17,9 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -50,7 +54,9 @@ import com.wmc.mediacenter.apps.SystemActions
 import com.wmc.mediacenter.data.AppSettings
 import com.wmc.mediacenter.data.ShortcutConfig
 import com.wmc.mediacenter.ui.components.AppTile
+import com.wmc.mediacenter.ui.components.TileHeight
 import com.wmc.mediacenter.ui.components.TileWidth
+import com.wmc.mediacenter.ui.components.WmcHighlightFrame
 import com.wmc.mediacenter.ui.components.HomeHeader
 import com.wmc.mediacenter.ui.theme.WmcTextPrimary
 import kotlin.math.roundToInt
@@ -129,9 +135,69 @@ private const val FollowerDampingRatio = 1.25f
  * horizontal scroll animation runs — only where it comes to rest. Vertical
  * scroll smoothness is unaffected by construction.
  */
-private val RowEdgePadding = 48.dp
+/**
+ * S28 — THE LEFT MARGIN, and the only real lever on how far right the strips
+ * sit. The cursor slot is `RowEdgePadding + TileWidth + RowTileSpacing`, and
+ * the 220dp lead-in card is non-negotiable if it must be fully visible — so
+ * this constant is the entire adjustment range.
+ *
+ * S29 — WHY EXACTLY 16, i.e. why this equals [RowTileSpacing]. Cards repeat
+ * every 236dp (220 tile + 16 gap), so the card BEFORE the lead-in card has its
+ * right edge at `RowEdgePadding - RowTileSpacing`. At 24.dp that put 8dp of it
+ * on screen as a sliver once you'd scrolled a couple of cards in. At 16.dp the
+ * edge lands exactly on x=0: fully offscreen, and the remaining left margin is
+ * one clean inter-card gap, so the row's rhythm is uniform all the way out.
+ *
+ * Anything BELOW 16 also hides the previous card (it just adds dead space and
+ * shifts everything further left); 8 or 0 are available if you want the last
+ * of the travel. Be aware 0 puts the lead-in card flush against the screen
+ * edge, where an overscanning TV will shave it — losing the left edge of a
+ * card you meant to show is worse than the sliver we just removed.
+ */
+private val RowEdgePadding = 16.dp
 private val RowTileSpacing = 16.dp
-private val RowCursorSlotStart = RowEdgePadding + TileWidth + RowTileSpacing // 284.dp
+/**
+ * S30 — the strip's vertical contentPadding, hoisted out of the three places
+ * that were hardcoding 14.dp. It defines where the CARD BAND starts: cards
+ * occupy y = [RowVerticalPadding, RowVerticalPadding + TileHeight]. Both the
+ * fixed highlight frame and the chevrons position against that band, NOT
+ * against the row Box — the Box also contains the label strip underneath, so
+ * centring on it sits everything visibly low.
+ */
+private val RowVerticalPadding = 14.dp
+private val RowCursorSlotStart = RowEdgePadding + TileWidth + RowTileSpacing // 252.dp
+
+/**
+ * S25/S26 — the glide is BACK, and it's safe now. The reason it had to be
+ * snapped in S25 was that the highlight was drawn by the focused tile, so any
+ * nonzero scroll duration let the highlight lead the row into place. S26 moved
+ * the highlight out of the tile and parked it at the cursor slot
+ * ([WmcHighlightFrame]), so it has no way to move regardless of how long the
+ * scroll takes. Cards now glide through a motionless frame — the actual WMC
+ * behaviour.
+ *
+ * Set to `true` to snap instead, if the glide ever costs too many frames on
+ * the box. The look degrades gracefully: the highlight stays put either way.
+ */
+private const val RowScrollInstant = false
+
+/**
+ * S27 — THE HORIZONTAL FEEL KNOB. Lower = snappier.
+ *
+ * 280ms (the S9 original) was tuned back when the highlight rode the focused
+ * tile, so a slow scroll HID the drift by spreading it out. With the frame
+ * fixed (S26) that reason is gone and the slowness is just slowness.
+ *
+ * Note the easing change too: [FastOutSlowInEasing] eases IN as well as out,
+ * so the row crept for the first few frames before moving — a big part of what
+ * read as "slow." [LinearOutSlowInEasing] leaves at full speed on frame one and
+ * decelerates into place, which is the WMC feel: immediate, then settles.
+ *
+ * FLOOR: the box renders ~22ms/frame, so 160ms is only ~7 frames of motion.
+ * Below ~120ms there aren't enough frames left to read as a glide at all and
+ * it degrades into a snap — at which point prefer [RowScrollInstant].
+ */
+private const val RowScrollDurationMs = 160
 
 /** One entry in Home's row list — either the derived Recent row (F4) or a user RowConfig. */
 private data class HomeRowItem(
@@ -416,7 +482,13 @@ private fun AppRow(
                 else -> MaterialTheme.typography.titleLarge
             },
             color = WmcTextPrimary.copy(alpha = titleAlpha),
-            modifier = Modifier.padding(start = 48.dp, bottom = 12.dp)
+            // S25 — the title labels the CURSOR SLOT, not the screen edge. When
+            // the tiles moved right by one slot (S24) this stayed at 48.dp and
+            // ended up left of the highlighted card.
+            modifier = Modifier.padding(
+                start = if (classicStrips) RowCursorSlotStart else RowEdgePadding,
+                bottom = 12.dp
+            )
         )
 
         val rowListState = rememberLazyListState()
@@ -433,7 +505,8 @@ private fun AppRow(
                 // to the LazyRow's start padding below.
                 private val anchorPx = with(density) { RowCursorSlotStart.toPx() }
                 override val scrollAnimationSpec: AnimationSpec<Float> =
-                    tween(durationMillis = 280, easing = FastOutSlowInEasing)
+                    if (RowScrollInstant) snap()
+                    else tween(durationMillis = RowScrollDurationMs, easing = LinearOutSlowInEasing)
 
                 override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float =
                     offset - anchorPx
@@ -489,11 +562,11 @@ private fun AppRow(
                         start = RowCursorSlotStart,
                         end = (rowViewportWidth - RowCursorSlotStart - TileWidth)
                             .coerceAtLeast(RowEdgePadding),
-                        top = 14.dp,
-                        bottom = 14.dp
+                        top = RowVerticalPadding,
+                        bottom = RowVerticalPadding
                     )
                 } else {
-                    PaddingValues(horizontal = RowEdgePadding, vertical = 14.dp)
+                    PaddingValues(horizontal = RowEdgePadding, vertical = RowVerticalPadding)
                 },
                 horizontalArrangement = Arrangement.spacedBy(RowTileSpacing),
                 modifier = Modifier
@@ -528,6 +601,10 @@ private fun AppRow(
                         labelOnlyWhenFocused = classicStrips,
                         fadedWhenUnfocused = fadedTiles,
                         preferIcons = preferIconTiles,
+                        // S26 — in classic strips the row draws ONE fixed
+                        // highlight at the cursor slot; tiles must not draw
+                        // their own or it moves with focus again.
+                        stationaryHighlight = classicStrips,
                         // Built-in cards run their action, shortcut cards fire
                         // their stored deep link; everything else falls back to
                         // AppTile's default launch-by-package behavior.
@@ -547,12 +624,43 @@ private fun AppRow(
                 }
             }
 
+            // S26 — THE FIXED HIGHLIGHT. Parked at the cursor slot, drawn AFTER
+            // the LazyRow so it sits in front of the artwork (WMC's frame is in
+            // front of content, see S23). The 14.dp top offset matches the
+            // strip's vertical contentPadding so the frame lands exactly on the
+            // tiles. Alpha is gated on expansion with the SAME curve as the
+            // tiles (S15) so it doesn't hang in the air over a collapsing row.
+            if (classicStrips && isRowFocused) {
+                WmcHighlightFrame(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(start = RowCursorSlotStart, top = RowVerticalPadding)
+                        .graphicsLayer {
+                            alpha = ((expansion - 0.6f) / 0.4f).coerceIn(0f, 1f)
+                        }
+                )
+            }
+
             // S9 — chevrons hint that the strip continues off-screen.
+            // S30 — anchored TOP + RowVerticalPadding and given the card's own
+            // height to centre within, so they line up with the middle of the
+            // cards rather than the middle of the row (which includes the
+            // label strip and dragged them ~15dp low).
             if (isRowFocused && rowListState.canScrollBackward) {
-                RowChevron(symbol = "‹", modifier = Modifier.align(Alignment.CenterStart))
+                RowChevron(
+                    symbol = "‹",
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(top = RowVerticalPadding)
+                )
             }
             if (isRowFocused && rowListState.canScrollForward && !lastTileAtCursor) {
-                RowChevron(symbol = "›", modifier = Modifier.align(Alignment.CenterEnd))
+                RowChevron(
+                    symbol = "›",
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = RowVerticalPadding)
+                )
             }
         }
         } // CompositionLocalProvider (horizontal anchor spec)
@@ -576,7 +684,13 @@ private fun RowChevron(symbol: String, modifier: Modifier = Modifier) {
         text = symbol,
         color = WmcTextPrimary.copy(alpha = 0.55f),
         fontSize = 34.sp,
-        modifier = modifier.padding(horizontal = 10.dp)
+        // S30 — the 10dp horizontal inset is GONE: the chevron now sits flush
+        // against the screen edge, out of the cards' way as far as it can get.
+        // The height + wrapContentHeight pair is what centres the glyph on the
+        // card band; the caller supplies the top offset to reach that band.
+        modifier = modifier
+            .height(TileHeight)
+            .wrapContentHeight(Alignment.CenterVertically)
     )
 }
 
