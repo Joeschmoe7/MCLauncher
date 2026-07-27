@@ -62,7 +62,9 @@ import kotlin.math.max
 // position (RowCursorSlotStart) from this width. Duplicating the number there
 // would silently break the WMC lead-in slot the first time a tile is resized.
 internal val TileWidth = 220.dp
-private val TileHeight = 130.dp
+// S30 — INTERNAL for the same reason as TileWidth: HomeScreen centres the row
+// chevrons on the CARD band, which it can't locate without the card's height.
+internal val TileHeight = 130.dp
 private val TileCornerRadius = 8.dp
 private const val TileFocusScale = 1.12f
 
@@ -163,6 +165,14 @@ fun AppTile(
     // S11 — Settings "Tile artwork": true shows the centered app icon instead
     // of the TV banner (banner becomes the fallback).
     preferIcons: Boolean = false,
+    // S26 — classic strips draw ONE stationary selection frame at the row's
+    // cursor slot (see WmcHighlightFrame) instead of every tile drawing its
+    // own. When true this tile suppresses its focus frame, glow and 1.12x
+    // zoom, so the highlight cannot move with focus — cards glide through a
+    // frame that never shifts, which is what WMC actually did. The per-card
+    // focus response that DOESN'T move (glass surface lighting up, artwork
+    // un-fading, label appearing) is kept.
+    stationaryHighlight: Boolean = false,
     // F4 — only the default launch path below (OK with no onClick override)
     // records a launch. Picker toggles and system-action cards always pass
     // their own onClick, so they never call this.
@@ -173,8 +183,11 @@ fun AppTile(
     val isFocused by interactionSource.collectIsFocusedAsState()
 
     // S4 — WMC-style eased glide instead of a linear tween.
+    // S26 — no zoom under a stationary frame: a growing card inside a fixed
+    // frame makes the frame look like it's breathing, and mid-glide two cards
+    // straddle the cursor so there's no single card the frame could size to.
     val scale by animateFloatAsState(
-        targetValue = if (isFocused) TileFocusScale else 1f,
+        targetValue = if (isFocused && !stationaryHighlight) TileFocusScale else 1f,
         animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
         label = "tileScale"
     )
@@ -305,6 +318,11 @@ fun AppTile(
             // thin frame use a vertical gradient stroke. Drawn (not border
             // modifiers) so the pulse only invalidates the draw pass, never
             // recomposes (S10).
+            // S26 — under a stationary frame this per-tile chrome is exactly
+            // what must NOT be drawn: it's the thing that made the highlight
+            // appear to move with focus. WmcHighlightFrame draws it once, at
+            // the row's cursor slot, instead.
+            if (!stationaryHighlight) {
             Box(
                 modifier = Modifier
                     .matchParentSize()
@@ -340,6 +358,7 @@ fun AppTile(
                         }
                     }
             )
+            }
 
             if (isSelected) {
                 Box(
@@ -390,6 +409,69 @@ fun AppTile(
             )
         }
     }
+}
+
+/**
+ * S26 — THE STATIONARY WMC SELECTION FRAME.
+ *
+ * The one piece of chrome that must never move. Real WMC's highlight was a
+ * fixed rectangle on screen that content slid *through* — not a decoration
+ * attached to the selected item. Reproducing it with per-tile focus chrome is
+ * impossible: focus flips in one frame while the scroll takes 280ms, so the
+ * highlight always leads the row into place ("jump, then drift").
+ *
+ * So the frame is hoisted out of the tile and parked at the row's cursor slot.
+ * Focus still moves normally — D-pad, OK, long-press are all untouched — only
+ * the drawing of it relocates. [AppTile] is told to suppress its own frame,
+ * glow and zoom via `stationaryHighlight`.
+ *
+ * Draw cost is strictly LOWER than before: one frame per focused row instead
+ * of one per focused tile, and the breathing pulse is read only in the draw
+ * phase (never composition), same as S10.
+ */
+@Composable
+fun WmcHighlightFrame(modifier: Modifier = Modifier) {
+    val glowPulse = rememberInfiniteTransition(label = "highlightPulse").animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(durationMillis = 1500), repeatMode = RepeatMode.Reverse),
+        label = "highlightPulseValue"
+    )
+    Box(
+        modifier = modifier
+            .width(TileWidth)
+            .height(TileHeight)
+            .drawWithCache {
+                val cornerRadius = CornerRadius(TileCornerRadius.toPx())
+                val glowWidth = 6.dp.toPx()
+                val frameWidth = 2.dp.toPx()
+                val frameBrush = Brush.verticalGradient(
+                    0f to Color.White,
+                    1f to Color.White.copy(alpha = 0.35f)
+                )
+                onDrawBehind {
+                    val pulse = 0.7f + 0.3f * glowPulse.value
+                    drawRoundRect(
+                        brush = Brush.verticalGradient(
+                            0f to Color(0xFFEAF5FF).copy(alpha = 0.60f * pulse),
+                            0.45f to Color(0xFFCFE6FF).copy(alpha = 0.25f * pulse),
+                            1f to Color(0xFFCFE6FF).copy(alpha = (0.08f * pulse).coerceAtLeast(0f))
+                        ),
+                        topLeft = Offset(glowWidth / 2f, glowWidth / 2f),
+                        size = Size(size.width - glowWidth, size.height - glowWidth),
+                        cornerRadius = cornerRadius,
+                        style = Stroke(glowWidth)
+                    )
+                    drawRoundRect(
+                        brush = frameBrush,
+                        topLeft = Offset(frameWidth / 2f, frameWidth / 2f),
+                        size = Size(size.width - frameWidth, size.height - frameWidth),
+                        cornerRadius = cornerRadius,
+                        style = Stroke(frameWidth)
+                    )
+                }
+            }
+    )
 }
 
 @Composable
