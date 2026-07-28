@@ -60,14 +60,17 @@ class AppRepository(
     fun loadInstalledApps(): List<AppInfo> {
         val byPackage = LinkedHashMap<String, ResolveInfo>()
 
-        queryFor(Intent(Intent.ACTION_MAIN).addCategory(CATEGORY_LEANBACK_LAUNCHER))
-            .forEach { byPackage.putIfAbsent(it.activityInfo.packageName, it) }
+        // Leanback first, so an app declaring both categories keeps its TV
+        // entry activity (and TV banner) rather than its phone entry.
+        val leanback = queryFor(Intent(Intent.ACTION_MAIN).addCategory(CATEGORY_LEANBACK_LAUNCHER))
+        leanback.forEach { byPackage.putIfAbsent(it.activityInfo.packageName, it) }
+        val tvPackages = leanback.mapTo(HashSet()) { it.activityInfo.packageName }
 
         queryFor(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER))
             .forEach { byPackage.putIfAbsent(it.activityInfo.packageName, it) }
 
         return byPackage.values
-            .mapNotNull(::toAppInfoOrNull)
+            .mapNotNull { toAppInfoOrNull(it, isTvApp = it.activityInfo.packageName in tvPackages) }
             .sortedBy { it.label.lowercase() }
     }
 
@@ -113,7 +116,7 @@ class AppRepository(
      * A single malformed/half-uninstalled package should never take down
      * discovery for everything else — skip it instead.
      */
-    private fun toAppInfoOrNull(resolveInfo: ResolveInfo): AppInfo? {
+    private fun toAppInfoOrNull(resolveInfo: ResolveInfo, isTvApp: Boolean): AppInfo? {
         val packageName = resolveInfo.activityInfo?.packageName ?: return null
         return try {
             val iconKey = "icon:$packageName"
@@ -126,7 +129,8 @@ class AppRepository(
                 icon = icon,
                 banner = banner,
                 fadedIcon = loadFaded(iconKey, icon),
-                fadedBanner = loadFaded(bannerKey, banner)
+                fadedBanner = loadFaded(bannerKey, banner),
+                isTvApp = isTvApp
             )
         } catch (e: Exception) {
             null

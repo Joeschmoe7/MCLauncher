@@ -34,5 +34,14 @@ data class AppInfo(
     val icon: ImageBitmap?,
     val banner: ImageBitmap?,
     val fadedIcon: ImageBitmap? = null,
-    val fadedBanner: ImageBitmap? = null
+    val fadedBanner: ImageBitmap? = null,
+    /**
+     * True when the app declares CATEGORY_LEANBACK_LAUNCHER (a proper TV
+     * app); false for sideloaded phone/tablet apps discovered only via
+     * CATEGORY_LAUNCHER. Drives the "Show non-TV apps" Settings filter for
+     * All Apps / the Add-apps picker — rows are never filtered by it.
+     * Defaults to true so synthetic tiles (shortcuts, system actions) are
+     * never caught by the filter.
+     */
+    val isTvApp: Boolean = true
 )

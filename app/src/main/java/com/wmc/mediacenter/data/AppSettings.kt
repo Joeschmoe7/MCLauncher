@@ -7,6 +7,13 @@ data class AppSettings(
     val hiddenPackages: Set<String> = emptySet(),
     /** F1 — reveal hidden apps in All Apps / Add-apps so they can be unhidden. */
     val showHiddenApps: Boolean = false,
+    /**
+     * T1 — ON by default: All Apps / the Add-apps picker include sideloaded
+     * non-TV apps (CATEGORY_LAUNCHER only, no leanback entry — Downloader,
+     * browsers, utilities). Off restores the old TV-apps-only listing.
+     * Rows are unaffected either way, same as [hiddenPackages].
+     */
+    val showNonTvApps: Boolean = true,
     /** F3 — package launched automatically once per cold start, or null for none. */
     val startupPackage: String? = null,
     /** F4 — off by default; controls whether the Recent row renders on Home. */

@@ -379,6 +379,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { settingsRepository.setShowHiddenApps(value) }
     }
 
+    // --- T1: Non-TV (sideloaded) apps -------------------------------------
+
+    fun setShowNonTvApps(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setShowNonTvApps(value) }
+    }
+
     // --- F3: Launch on startup --------------------------------------------
 
     fun setStartupPackage(packageName: String?) {
