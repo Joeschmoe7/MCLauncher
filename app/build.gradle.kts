@@ -15,8 +15,8 @@ android {
         applicationId = "com.wmc.mediacenter"
         minSdk = 26
         targetSdk = 34
-        versionCode = 10
-        versionName = "0.7.0-apps"
+        versionCode = 11
+        versionName = "0.8.0-backup"
 
         ndk {
             // Match the onn box's arm64 chip; armeabi-v7a kept for older Android TV devices.

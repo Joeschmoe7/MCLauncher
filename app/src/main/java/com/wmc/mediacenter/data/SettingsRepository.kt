@@ -113,6 +113,32 @@ class SettingsRepository(private val context: Context) {
         context.launcherDataStore.edit { prefs -> prefs[PREFER_ICON_TILES_KEY] = value }
     }
 
+    /**
+     * T2 — restore: replaces every setting in ONE DataStore edit, so the
+     * settingsFlow collector sees a single consistent emission rather than
+     * twelve partially-restored intermediate states.
+     */
+    suspend fun replaceAll(settings: AppSettings) {
+        context.launcherDataStore.edit { prefs ->
+            prefs[USE_24_HOUR_CLOCK_KEY] = settings.use24HourClock
+            prefs[SHOW_APP_NAMES_KEY] = settings.showAppNames
+            prefs[HIDDEN_PACKAGES_KEY] = settings.hiddenPackages
+            prefs[SHOW_HIDDEN_APPS_KEY] = settings.showHiddenApps
+            prefs[SHOW_NON_TV_APPS_KEY] = settings.showNonTvApps
+            if (settings.startupPackage == null) {
+                prefs.remove(STARTUP_PACKAGE_KEY)
+            } else {
+                prefs[STARTUP_PACKAGE_KEY] = settings.startupPackage
+            }
+            prefs[SHOW_RECENT_ROW_KEY] = settings.showRecentRow
+            prefs[RECENT_PACKAGES_KEY] = settings.recentPackages.joinToString("\n")
+            prefs[GLASS_TILES_KEY] = settings.glassTiles
+            prefs[CLASSIC_STRIPS_KEY] = settings.classicStrips
+            prefs[FADED_TILES_KEY] = settings.fadedTiles
+            prefs[PREFER_ICON_TILES_KEY] = settings.preferIconTiles
+        }
+    }
+
     suspend fun isSettingsRowMigrated(): Boolean =
         context.launcherDataStore.data.first()[SETTINGS_ROW_MIGRATED_KEY] ?: false
 

@@ -54,6 +54,8 @@ Google TV Home. That is why the symptom is "it doesn't always launch on startup.
 ```bash
 # after every install that matters:
 adb shell cmd package set-home-activity com.wmc.mediacenter/.MainActivity
+adb shell appops set com.wmc.mediacenter SYSTEM_ALERT_WINDOW allow      # S32 cold-boot self-start
+adb shell appops set com.wmc.mediacenter MANAGE_EXTERNAL_STORAGE allow  # T2 backup/restore
 
 # verify — you want com.wmc.mediacenter.MainActivity, NOT launcherx:
 adb shell cmd package resolve-activity --user 0 \
@@ -94,7 +96,9 @@ MainActivity ──> MCLauncherApp (in-memory screen switch, context menus, conf
 MainViewModel ─ the ONLY place state changes. UI composables are stateless.
    ├── AppRepository          discovery + artwork decode + faded bake (Dispatchers.IO)
    ├── LauncherConfigRepository   rows, JSON in DataStore
-   └── SettingsRepository         prefs in DataStore
+   ├── SettingsRepository         prefs in DataStore
+   └── BackupRepository       T2 — rows+settings ⇄ /sdcard/MCLauncher/mclauncher-backup.json
+                              (survives uninstall; needs the MANAGE_EXTERNAL_STORAGE appop, see §1)
 ```
 
 **Data model:** `LauncherConfig(rows: List<RowConfig>)`, `RowConfig(id, name, packages)`,
@@ -112,8 +116,8 @@ serialized to JSON in DataStore Preferences. `AppInfo` carries pre-decoded `Imag
 ### Settings (all in `AppSettings` → `SettingsRepository` → DataStore)
 
 `use24HourClock`, `showAppNames`, `classicStrips`, `glassTiles`, `fadedTiles`,
-`preferIconTiles`, `hiddenPackages`, `showHiddenApps`, `startupPackage`, `showRecentRow`,
-`recentPackages`.
+`preferIconTiles`, `hiddenPackages`, `showHiddenApps`, `showNonTvApps`, `startupPackage`,
+`showRecentRow`, `recentPackages`.
 
 Adding one means touching, in order: `AppSettings` → `SettingsRepository` (key + read + setter)
 → `MainViewModel` → `SettingsScreen` row → wire the lambda at the `MCLauncherApp` call site.

@@ -37,6 +37,9 @@ sealed interface ContextMenuState {
     /** Confirm before wiping the row layout back to the first-run seed. */
     data object ConfirmResetSetup : ContextMenuState
 
+    /** T2 — confirm before overwriting live rows/settings with the backup file's contents. */
+    data object ConfirmRestoreBackup : ContextMenuState
+
     /** Confirm before switching to the box's other Home app — the one deliberate "leave WMC" action, gated so a stray click can't trigger it. */
     data object ConfirmSwitchLauncher : ContextMenuState
 

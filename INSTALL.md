@@ -61,6 +61,7 @@ reverses all of it.
 |---|---|
 | `set-home-activity` | The **Home button** opens MCLauncher instead of Google TV |
 | `appops … SYSTEM_ALERT_WINDOW` | MCLauncher **appears on its own after a power cycle** |
+| `appops … MANAGE_EXTERNAL_STORAGE` | **Backup & restore** in Settings can read/write its backup file (optional) |
 
 You can do the first without the second. You'll just have to press Home once
 after unplugging and replugging the TV.
@@ -140,6 +141,21 @@ adb -s DEVICE_IP:5555 shell appops get com.wmc.mediacenter SYSTEM_ALERT_WINDOW
 
 Should print `allow`. Any `rejectTime` shown next to it is a record of a past
 event and means nothing here.
+
+### 6b. Optional third command — backup & restore
+
+Settings has **Back up rows & settings** / **Restore from backup**, which
+keep a copy of your setup at `/sdcard/MCLauncher/mclauncher-backup.json` so
+it survives an uninstall (updates that change the signing key require one).
+Writing to that shared location needs one more grant:
+
+```
+adb -s DEVICE_IP:5555 shell appops set com.wmc.mediacenter MANAGE_EXTERNAL_STORAGE allow
+```
+
+Without it, both buttons show a message with this command instead of working.
+Like the others, it survives reboots but not uninstalls — after reinstalling,
+re-run it **before** using Restore.
 
 ### 7. Test it properly
 

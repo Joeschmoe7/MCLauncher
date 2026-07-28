@@ -203,7 +203,15 @@ fun MCLauncherApp(viewModel: MainViewModel) {
                     onSetFadedTiles = viewModel::setFadedTiles,
                     onSetPreferIconTiles = viewModel::setPreferIconTiles,
                     onPickStartupApp = { contextMenu = ContextMenuState.StartupAppMenu },
-                    onResetSetup = { contextMenu = ContextMenuState.ConfirmResetSetup }
+                    onResetSetup = { contextMenu = ContextMenuState.ConfirmResetSetup },
+                    // T2 — backup is non-destructive, runs immediately;
+                    // restore overwrites live config, so it confirms first.
+                    onBackup = {
+                        viewModel.exportBackup { msg ->
+                            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                        }
+                    },
+                    onRestore = { contextMenu = ContextMenuState.ConfirmRestoreBackup }
                 )
             }
         }
@@ -252,6 +260,20 @@ fun MCLauncherApp(viewModel: MainViewModel) {
                         "Delete" to {
                             viewModel.deleteRow(menu.rowId)
                             contextMenu = null
+                        }
+                    ),
+                    onDismiss = { contextMenu = null }
+                )
+
+                ContextMenuState.ConfirmRestoreBackup -> ContextMenuOverlay(
+                    title = "Replace current rows and settings with the backup?",
+                    options = listOf(
+                        "Cancel" to { contextMenu = null },
+                        "Restore" to {
+                            contextMenu = null
+                            viewModel.importBackup { msg ->
+                                Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                            }
                         }
                     ),
                     onDismiss = { contextMenu = null }
