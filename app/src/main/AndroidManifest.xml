@@ -33,6 +33,36 @@
         <package android:name="com.android.vending" />
     </queries>
 
+    <!--
+        S31 — the home handoff at cold boot does not reliably land on us even
+        though we hold android.app.role.HOME AND the user-0 preferred activity
+        for CATEGORY_HOME. See BootReceiver: we start ourselves after boot
+        instead of relying on the system to pick us.
+    -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!--
+        S32 — BAL EXEMPTION. S31's receiver ran correctly and was refused:
+          W ActivityTaskManager: Background activity launch blocked
+            [callingPackage: com.wmc.mediacenter; callingUidProcState: RECEIVER;
+             backgroundStartPrivileges: allowsBackgroundActivityStarts=false]
+          E ActivityTaskManager: Abort background activity starts from 10120
+
+        Holding android.app.role.HOME did NOT exempt us. Holding
+        SYSTEM_ALERT_WINDOW is a documented exemption from the background
+        activity launch restriction, so we declare it purely for that — the app
+        draws no overlays.
+
+        DECLARING IT IS NOT ENOUGH. It's an appop, off by default, and there is
+        usually no way to enable it from the Google TV settings UI. Grant it
+        once per device:
+
+          adb shell appops set com.wmc.mediacenter SYSTEM_ALERT_WINDOW allow
+
+        It survives reboots. It does NOT survive an uninstall.
+    -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
     <application
         android:allowBackup="false"
         android:banner="@mipmap/ic_launcher"
@@ -67,6 +97,21 @@
             </intent-filter>
 
         </activity>
+
+        <!--
+            S31 — exported=true is REQUIRED: BOOT_COMPLETED is a protected
+            system broadcast and an unexported manifest receiver will never be
+            delivered it. This receiver is otherwise inert; it responds to
+            nothing else.
+        -->
+        <receiver
+            android:name=".BootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
 
     </application>
 
