@@ -47,15 +47,21 @@ wrong turns were taken repeatedly.
 the launcher silently stops being Home — it looks intermittent and random, but it isn't.
 
 Google TV Home (`com.google.android.apps.tv.launcherx`) declares its HOME intent filter with
-**`priority=2`**; ours is the standard priority 0. So with no preferred-activity record to break
-the tie, Android doesn't show a chooser — it just picks the highest priority and falls back to
-Google TV Home. That is why the symptom is "it doesn't always launch on startup."
+**`priority=2`**; ours is the standard priority 0. **Verified 2026-07-28: priority wins even
+against a preferred-activity record** — with our record present (`mAlways=true`, selected over
+launcherx), home resolution STILL returned launcherx. `set-home-activity` can therefore never
+fix home resolution on this box; whenever the system starts a home app itself (cold boot, or
+wake-from-sleep after our process died), launcherx appears. S31 (BootReceiver) covers boot;
+S33 (HomeWatchdogService, accessibility) covers everything else — see §2.
 
 ```bash
 # after every install that matters:
 adb shell cmd package set-home-activity com.wmc.mediacenter/.MainActivity
 adb shell appops set com.wmc.mediacenter SYSTEM_ALERT_WINDOW allow      # S32 cold-boot self-start
 adb shell appops set com.wmc.mediacenter MANAGE_EXTERNAL_STORAGE allow  # T2 backup/restore
+# S33 wake-from-sleep watchdog (accessibility service; also not survived by uninstall):
+adb shell settings put secure enabled_accessibility_services com.wmc.mediacenter/com.wmc.mediacenter.HomeWatchdogService
+adb shell settings put secure accessibility_enabled 1
 
 # verify — you want com.wmc.mediacenter.MainActivity, NOT launcherx:
 adb shell cmd package resolve-activity --user 0 \

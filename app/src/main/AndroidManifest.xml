@@ -133,6 +133,24 @@
             </intent-filter>
         </receiver>
 
+        <!--
+            S33 — wake-from-sleep watchdog; see HomeWatchdogService for the
+            full story. Inert until the service is enabled in accessibility
+            settings (one adb command, in INSTALL.md).
+        -->
+        <service
+            android:name=".HomeWatchdogService"
+            android:exported="true"
+            android:label="@string/watchdog_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/home_watchdog_config" />
+        </service>
+
     </application>
 
 </manifest>

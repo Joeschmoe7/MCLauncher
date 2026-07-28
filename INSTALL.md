@@ -157,6 +157,34 @@ Without it, both buttons show a message with this command instead of working.
 Like the others, it survives reboots but not uninstalls — after reinstalling,
 re-run it **before** using Restore.
 
+### 6c. Recommended fourth command — stay the home screen after sleep
+
+Google TV's own launcher outranks any third-party app in the system's home
+selection (its priority can't be matched by a normal app). In practice that
+means: if the box wakes from sleep and MCLauncher's process happened to be
+killed while asleep, **Google TV Home appears instead**. The fix is a tiny
+watchdog inside MCLauncher that notices Google TV Home appearing and
+immediately returns to MCLauncher. It runs as an accessibility service — it
+watches for exactly one thing (the Google TV home window appearing), reads
+no screen content, and captures nothing. Enable it with:
+
+```
+adb -s DEVICE_IP:5555 shell settings put secure enabled_accessibility_services com.wmc.mediacenter/com.wmc.mediacenter.HomeWatchdogService
+```
+
+```
+adb -s DEVICE_IP:5555 shell settings put secure accessibility_enabled 1
+```
+
+You can also toggle it on the TV under **Settings → System → Accessibility →
+MCLauncher home watchdog**. The "Google TV Home" tile inside MCLauncher
+still works — the watchdog stands down for 15 minutes when you use it.
+
+Survives reboots, not uninstalls — same as the others. If it ever stops
+working (Google Play Protect occasionally switches off accessibility
+services for sideloaded apps), just re-run the two commands or re-enable it
+in Settings.
+
 ### 7. Test it properly
 
 **Unplug the device's power, wait five seconds, plug it back in.**

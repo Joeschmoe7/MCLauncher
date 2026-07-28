@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    S33 — see HomeWatchdogService. Scope is deliberately minimal:
+    - only TYPE_WINDOW_STATE_CHANGED events
+    - only from the launcherx package (framework filters before we're called)
+    - canRetrieveWindowContent stays false: the service can never read
+      anything on screen, it only learns "a launcherx window appeared".
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault"
+    android:canRetrieveWindowContent="false"
+    android:notificationTimeout="0"
+    android:packageNames="com.google.android.apps.tv.launcherx"
+    android:description="@string/watchdog_description" />

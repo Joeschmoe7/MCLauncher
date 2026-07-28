@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($adb = \"$env:LOCALAPPDATA\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\"; & $adb *)",
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\"; & \"C:\\\\Users\\\\loukr\\\\.gradle\\\\wrapper\\\\dists\\\\gradle-9.5.0-bin\\\\bvnork1r7n8i6kp5cnkibsc9q\\\\gradle-9.5.0\\\\bin\\\\gradle.bat\" *)",
+      "PowerShell(Get-Content *)",
+      "PowerShell(ls *)",
+      "PowerShell(Get-ChildItem *)",
+      "PowerShell(Test-Path *)"
+    ]
+  }
+}
