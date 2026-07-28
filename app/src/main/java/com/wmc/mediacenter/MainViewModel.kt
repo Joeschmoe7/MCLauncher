@@ -12,9 +12,13 @@ import com.wmc.mediacenter.apps.AppInfo
 import com.wmc.mediacenter.apps.AppRepository
 import com.wmc.mediacenter.apps.SystemActions
 import com.wmc.mediacenter.data.AppSettings
+import com.wmc.mediacenter.data.BackupRepository
+import com.wmc.mediacenter.data.BackupResult
+import com.wmc.mediacenter.data.LauncherBackup
 import com.wmc.mediacenter.data.LauncherConfig
 import com.wmc.mediacenter.data.LauncherConfigRepository
 import com.wmc.mediacenter.data.RowConfig
+import com.wmc.mediacenter.data.SettingsBackup
 import com.wmc.mediacenter.data.SettingsRepository
 import com.wmc.mediacenter.data.ShortcutConfig
 import com.wmc.mediacenter.data.buildSeedConfig
@@ -53,6 +57,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     )
     private val configRepository = LauncherConfigRepository(application)
     private val settingsRepository = SettingsRepository(application)
+    private val backupRepository = BackupRepository()
 
     private val _apps = MutableStateFlow<List<AppInfo>>(emptyList())
     val apps: StateFlow<List<AppInfo>> = _apps.asStateFlow()
@@ -446,6 +451,58 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (row.id == rowId) row.copy(packages = row.packages + shortcut.id) else row
             }
             configRepository.save(current.copy(rows = updatedRows, shortcuts = current.shortcuts + shortcut))
+        }
+    }
+
+    // --- T2: Backup & restore ----------------------------------------------
+
+    /**
+     * Writes rows + shortcuts + settings to the fixed backup path (see
+     * BackupRepository). [onResult] gets a user-facing message either way;
+     * always invoked on the main thread.
+     */
+    fun exportBackup(onResult: (String) -> Unit) {
+        viewModelScope.launch {
+            val config = configRepository.currentOrNull()
+            if (config == null) {
+                onResult("Nothing to back up yet")
+                return@launch
+            }
+            val backup = LauncherBackup(
+                schemaVersion = BackupRepository.SCHEMA_VERSION,
+                appVersion = BuildConfig.VERSION_NAME,
+                exportedAt = BackupRepository.timestamp(),
+                config = config,
+                settings = SettingsBackup.from(settings.value)
+            )
+            val result = withContext(Dispatchers.IO) { backupRepository.export(backup) }
+            onResult(
+                when (result) {
+                    is BackupResult.Ok -> "Backed up to ${result.value}"
+                    is BackupResult.Error -> result.message
+                }
+            )
+        }
+    }
+
+    /**
+     * Overwrites live rows/shortcuts/settings with the backup file's
+     * contents. Destructive — the Settings screen confirms before calling
+     * this, same pattern as [resetToFirstRunSeed].
+     */
+    fun importBackup(onResult: (String) -> Unit) {
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) { backupRepository.import() }
+            when (result) {
+                is BackupResult.Error -> onResult(result.message)
+                is BackupResult.Ok -> {
+                    val backup = result.value
+                    configRepository.save(backup.config)
+                    settingsRepository.replaceAll(backup.settings.toAppSettings())
+                    val exported = backup.exportedAt?.let { " (from $it)" } ?: ""
+                    onResult("Restored rows and settings$exported")
+                }
+            }
         }
     }
 

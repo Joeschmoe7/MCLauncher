@@ -51,7 +51,9 @@ fun SettingsScreen(
     onSetFadedTiles: (Boolean) -> Unit,
     onSetPreferIconTiles: (Boolean) -> Unit,
     onPickStartupApp: () -> Unit,
-    onResetSetup: () -> Unit
+    onResetSetup: () -> Unit,
+    onBackup: () -> Unit,
+    onRestore: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -121,6 +123,19 @@ fun SettingsScreen(
             label = "Tile artwork",
             valueLabel = if (settings.preferIconTiles) "Icon" else "Banner",
             onClick = { onSetPreferIconTiles(!settings.preferIconTiles) }
+        )
+        SettingsRow(
+            // T2 — rows/shortcuts/settings to /sdcard/MCLauncher/, so a
+            // reinstall (e.g. the first release-signed build) isn't a total
+            // reset. Restore confirms one level up, like Re-run setup.
+            label = "Back up rows & settings",
+            valueLabel = null,
+            onClick = onBackup
+        )
+        SettingsRow(
+            label = "Restore from backup",
+            valueLabel = null,
+            onClick = onRestore
         )
         SettingsRow(
             label = "Re-run first-time setup",

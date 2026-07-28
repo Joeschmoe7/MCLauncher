@@ -63,6 +63,26 @@
     -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
+    <!--
+        T2 — backup & restore reads/writes a fixed public path
+        (/sdcard/MCLauncher/mclauncher-backup.json) so the backup SURVIVES AN
+        UNINSTALL — the app-private external dir is wiped with the package,
+        which would defeat the point. On Android 11+ a fixed public path
+        requires "All files access"; like SYSTEM_ALERT_WINDOW above it must be
+        granted once per device over adb (no Google TV settings UI for it):
+
+          adb shell appops set com.wmc.mediacenter MANAGE_EXTERNAL_STORAGE allow
+
+        Survives reboots, NOT uninstalls — after reinstalling, re-grant BEFORE
+        restoring. Ungranted, backup/restore fail with an on-screen message
+        that includes this command; nothing else in the app touches storage.
+        WRITE_EXTERNAL_STORAGE covers the same feature on Android 10 and below.
+    -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="29" />
+
     <application
         android:allowBackup="false"
         android:banner="@mipmap/ic_launcher"
