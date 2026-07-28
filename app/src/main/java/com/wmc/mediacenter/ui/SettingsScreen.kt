@@ -44,6 +44,7 @@ fun SettingsScreen(
     onSetUse24HourClock: (Boolean) -> Unit,
     onSetShowAppNames: (Boolean) -> Unit,
     onSetShowHiddenApps: (Boolean) -> Unit,
+    onSetShowNonTvApps: (Boolean) -> Unit,
     onSetShowRecentRow: (Boolean) -> Unit,
     onSetGlassTiles: (Boolean) -> Unit,
     onSetClassicStrips: (Boolean) -> Unit,
@@ -77,6 +78,13 @@ fun SettingsScreen(
             label = "Show hidden apps",
             valueLabel = if (settings.showHiddenApps) "Shown" else "Hidden",
             onClick = { onSetShowHiddenApps(!settings.showHiddenApps) }
+        )
+        SettingsRow(
+            // T1 — sideloaded phone/tablet apps (no leanback entry) in
+            // All Apps / the Add-apps picker.
+            label = "Show non-TV apps",
+            valueLabel = if (settings.showNonTvApps) "Shown" else "Hidden",
+            onClick = { onSetShowNonTvApps(!settings.showNonTvApps) }
         )
         SettingsRow(
             label = "Launch on startup",

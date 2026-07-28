@@ -56,13 +56,12 @@ fun MCLauncherApp(viewModel: MainViewModel) {
     var dialog by remember { mutableStateOf<DialogState?>(null) }
 
     // F1 — All Apps / Add-apps only ever show hidden packages when the
-    // "Show hidden apps" toggle is on. Rows are left on the full
-    // resolution path below (hiding never touches rows).
-    val visibleApps = if (settings.showHiddenApps) {
-        allApps
-    } else {
-        allApps.filter { it.packageName !in settings.hiddenPackages }
-    }
+    // "Show hidden apps" toggle is on. T1 — same for non-TV (sideloaded)
+    // apps when "Show non-TV apps" is off. Rows are left on the full
+    // resolution path below (neither filter ever touches rows).
+    val visibleApps = allApps
+        .filter { settings.showHiddenApps || it.packageName !in settings.hiddenPackages }
+        .filter { settings.showNonTvApps || it.isTvApp }
 
     // F4 — resolved Recent-row apps, newest first, excluding hidden/uninstalled.
     val recentApps = if (!settings.showRecentRow) {
@@ -197,6 +196,7 @@ fun MCLauncherApp(viewModel: MainViewModel) {
                     onSetUse24HourClock = viewModel::setUse24HourClock,
                     onSetShowAppNames = viewModel::setShowAppNames,
                     onSetShowHiddenApps = viewModel::setShowHiddenApps,
+                    onSetShowNonTvApps = viewModel::setShowNonTvApps,
                     onSetShowRecentRow = viewModel::setShowRecentRow,
                     onSetGlassTiles = viewModel::setGlassTiles,
                     onSetClassicStrips = viewModel::setClassicStrips,

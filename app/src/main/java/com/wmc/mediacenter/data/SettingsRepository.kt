@@ -16,6 +16,7 @@ private val USE_24_HOUR_CLOCK_KEY = booleanPreferencesKey("use_24_hour_clock")
 private val SHOW_APP_NAMES_KEY = booleanPreferencesKey("show_app_names")
 private val HIDDEN_PACKAGES_KEY = stringSetPreferencesKey("hidden_packages")
 private val SHOW_HIDDEN_APPS_KEY = booleanPreferencesKey("show_hidden_apps")
+private val SHOW_NON_TV_APPS_KEY = booleanPreferencesKey("show_non_tv_apps")
 private val STARTUP_PACKAGE_KEY = stringPreferencesKey("startup_package")
 private val SHOW_RECENT_ROW_KEY = booleanPreferencesKey("show_recent_row")
 private val RECENT_PACKAGES_KEY = stringPreferencesKey("recent_packages")
@@ -47,6 +48,7 @@ class SettingsRepository(private val context: Context) {
                 showAppNames = prefs[SHOW_APP_NAMES_KEY] ?: true,
                 hiddenPackages = prefs[HIDDEN_PACKAGES_KEY] ?: emptySet(),
                 showHiddenApps = prefs[SHOW_HIDDEN_APPS_KEY] ?: false,
+                showNonTvApps = prefs[SHOW_NON_TV_APPS_KEY] ?: true,
                 startupPackage = prefs[STARTUP_PACKAGE_KEY],
                 showRecentRow = prefs[SHOW_RECENT_ROW_KEY] ?: false,
                 recentPackages = prefs[RECENT_PACKAGES_KEY]
@@ -74,6 +76,10 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setShowHiddenApps(value: Boolean) {
         context.launcherDataStore.edit { prefs -> prefs[SHOW_HIDDEN_APPS_KEY] = value }
+    }
+
+    suspend fun setShowNonTvApps(value: Boolean) {
+        context.launcherDataStore.edit { prefs -> prefs[SHOW_NON_TV_APPS_KEY] = value }
     }
 
     /** Null clears the startup package (means "None"). */
