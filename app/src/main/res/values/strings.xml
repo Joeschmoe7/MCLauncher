@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">MCLauncher</string>
+    <string name="watchdog_label">MCLauncher home watchdog</string>
+    <string name="watchdog_description">Returns to MCLauncher when the stock Google TV home screen appears (e.g. after waking from sleep). Watches only for the Google TV home window — it reads no screen content and captures nothing.</string>
 </resources>

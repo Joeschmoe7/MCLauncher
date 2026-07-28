@@ -26,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.wmc.mediacenter.BuildConfig
+import com.wmc.mediacenter.HomeHandoff
 import com.wmc.mediacenter.MainViewModel
 import com.wmc.mediacenter.RowUiState
 import com.wmc.mediacenter.apps.AppInfo
@@ -538,6 +539,9 @@ private fun uninstallApp(context: Context, packageName: String) {
  * stray remote press on this card can no longer leave WMC by accident.
  */
 private fun launchOtherHome(context: Context) {
+    // S33 — tell the watchdog this is a deliberate visit so it doesn't
+    // immediately bounce the user back here.
+    HomeHandoff.beginDeliberateVisit()
     try {
         context.startActivity(
             Intent(Intent.ACTION_MAIN)
