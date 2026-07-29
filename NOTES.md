@@ -54,6 +54,26 @@ fix home resolution on this box; whenever the system starts a home app itself (c
 wake-from-sleep after our process died), launcherx appears. S31 (BootReceiver) covers boot;
 S33 (HomeWatchdogService, accessibility) covers everything else — see §2.
 
+**S34 — the "home task" is a separate concept from "which activity is on screen," and BACK
+resolves against it.** Android keeps exactly one home-task slot per display (`rootTaskId=1`
+here). Whichever app last started via an intent actually carrying `ACTION_MAIN` +
+`CATEGORY_HOME` owns that slot, and pressing BACK with no parent activity reveals THAT slot's
+occupant — not "whichever app the user tapped from." S31/S33 originally relaunched
+`MainActivity` via a bare component intent (`Intent(context, MainActivity::class.java)`, no
+category). That renders us on screen looking fully in charge, but registers only an ordinary
+background task — launcherx silently keeps owning the home slot from whenever it was last
+resolved that way. Verified on-device: the identical intent produces `type=standard` without
+the category and `type=home, rootTaskId=1` with it; only the latter makes backing out of a
+launched app (Play Store, Settings, ...) correctly return to us. Fix: both receivers now build
+`Intent(ACTION_MAIN).addCategory(CATEGORY_HOME)` targeted at `MainActivity`, exactly mirroring
+what a genuine Home-button press sends.
+
+**Caveat found while testing S34:** `am force-stop` is not equivalent to the low-memory kill
+that happens during sleep — force-stop is a deliberate OS action that also disables
+accessibility services (and notification listeners, etc.) as a security measure, wiping
+`enabled_accessibility_services` for that component. A real background/OOM kill does not do
+this. If you ever force-stop MCLauncher from Settings, re-enable the watchdog afterward (§1).
+
 ```bash
 # after every install that matters:
 adb shell cmd package set-home-activity com.wmc.mediacenter/.MainActivity

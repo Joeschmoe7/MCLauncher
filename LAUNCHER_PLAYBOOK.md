@@ -135,6 +135,48 @@ Why it works where everything else fails:
   Protect occasionally disables accessibility services of sideloaded apps** — if the
   launcher stops coming back after sleep, check the accessibility toggle first.
 
+### The home-task trap: BACK can reveal the wrong launcher even while yours is on screen
+
+A distinct bug from resolution itself, easy to miss because your launcher looks completely
+fine at the moment you cause it: **Android keeps exactly one "home task" slot per display.**
+Whichever app last started via an intent actually carrying `ACTION_MAIN` + `CATEGORY_HOME`
+owns that slot — and when the user backs out of some other app with nothing left in its own
+back stack, the system reveals **that slot's occupant**, not "whichever app the user happened
+to tap the other app from."
+
+If your Layer 2/3 recovery code (§2) relaunches your main activity via a bare component intent
+— `Intent(context, MainActivity::class.java)`, no category — you render on screen and look
+fully in charge, but you've only created an ordinary background task. The stock launcher
+silently keeps owning the home slot from whenever it was last resolved that way. The
+symptom: everything seems fine, then the user backs out of Play Store, Settings, or any other
+app, and lands on the *stock* launcher instead of yours — even though yours was clearly
+foreground a minute earlier.
+
+**Fix:** every self-relaunch must carry the same intent shape a genuine Home-button press
+would send:
+
+```kotlin
+Intent(Intent.ACTION_MAIN).apply {
+    setClass(context, MainActivity::class.java)
+    addCategory(Intent.CATEGORY_HOME)
+    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+}
+```
+
+Verify with `dumpsys activity activities | grep rootTaskId=1` — your task should show
+`type=home` and `visible=true`, the other launcher's `type=home` entry should show
+`visible=false`. Confirm the actual fix by opening some other app fresh and backing out of
+it; if it returns to you, you're done.
+
+**Testing note:** don't use `am force-stop` to simulate the sleep/OOM kill this defends
+against. Force-stop is a deliberate OS action that ALSO disables accessibility services (and
+notification listeners) as a security measure — it silently clears the "enabled" record for
+any accessibility-based recovery service you built for §2, which then looks like the watchdog
+"stopped working" when really the test method broke it. A real low-memory kill during sleep
+does not do this. If you need to force-stop for other testing, remember to re-enable any
+accessibility service afterward.
+
 ### The install ritual
 
 Every install invalidates per-install state. Script this; forgetting one step produces

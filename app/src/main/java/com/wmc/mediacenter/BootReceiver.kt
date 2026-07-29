@@ -42,6 +42,19 @@ import android.util.Log
  *
  * Holding the HOME role may exempt us from that restriction. That is the whole
  * bet, and one boot settles it.
+ *
+ * S34 — THE LAUNCH INTENT MUST CARRY CATEGORY_HOME, NOT JUST TARGET
+ * MainActivity BY COMPONENT. Android keeps exactly one "home task" per
+ * display; whichever app last started via an actual ACTION_MAIN+HOME intent
+ * owns that slot, and BACK-with-no-parent resolves to THAT task, not to
+ * "whatever the user tapped an app from". A bare component intent (what this
+ * used to send) creates an ordinary background task — we render fine and
+ * look fully in charge, but launcherx silently keeps owning the home slot,
+ * so backing out of any launched app (Play Store, Settings, ...) surfaces
+ * launcherx instead of us. Verified on-device 2026-07-29: the identical
+ * component-only intent produces `type=standard`; adding
+ * ACTION_MAIN+CATEGORY_HOME produces `type=home, rootTaskId=1`, and
+ * back-navigation then correctly returns to us.
  */
 class BootReceiver : BroadcastReceiver() {
 
@@ -50,7 +63,9 @@ class BootReceiver : BroadcastReceiver() {
 
         Log.i(TAG, "BOOT_COMPLETED received; starting MainActivity")
 
-        val launch = Intent(context, MainActivity::class.java).apply {
+        val launch = Intent(Intent.ACTION_MAIN).apply {
+            setClass(context, MainActivity::class.java)
+            addCategory(Intent.CATEGORY_HOME)
             // NEW_TASK is mandatory from a receiver context — there is no
             // activity task to inherit. CLEAR_TOP keeps us from stacking a
             // second instance on top of a singleTask activity that may
