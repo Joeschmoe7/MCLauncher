@@ -66,7 +66,15 @@ class HomeWatchdogService : AccessibilityService() {
         }
 
         Log.i(TAG, "launcherx home appeared — bouncing back to MCLauncher")
-        val launch = Intent(this, MainActivity::class.java).apply {
+        // S34 — CATEGORY_HOME is required, not just targeting MainActivity by
+        // component: it's what makes this launch actually reclaim the
+        // system's one home-task slot. Without it we'd render on top and
+        // look right, but launcherx would keep silently owning that slot,
+        // and backing out of the next app opened would reveal launcherx
+        // again instead of us. See BootReceiver's S34 note for the full story.
+        val launch = Intent(Intent.ACTION_MAIN).apply {
+            setClass(this@HomeWatchdogService, MainActivity::class.java)
+            addCategory(Intent.CATEGORY_HOME)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
         }
