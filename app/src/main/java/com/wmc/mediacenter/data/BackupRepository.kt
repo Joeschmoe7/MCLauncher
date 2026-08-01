@@ -51,7 +51,8 @@ data class SettingsBackup(
     val glassTiles: Boolean = false,
     val classicStrips: Boolean = true,
     val fadedTiles: Boolean = true,
-    val preferIconTiles: Boolean = false
+    val preferIconTiles: Boolean = false,
+    val screensaverFolderPath: String? = null
 ) {
     fun toAppSettings() = AppSettings(
         use24HourClock = use24HourClock,
@@ -65,7 +66,8 @@ data class SettingsBackup(
         glassTiles = glassTiles,
         classicStrips = classicStrips,
         fadedTiles = fadedTiles,
-        preferIconTiles = preferIconTiles
+        preferIconTiles = preferIconTiles,
+        screensaverFolderPath = screensaverFolderPath
     )
 
     companion object {
@@ -81,7 +83,8 @@ data class SettingsBackup(
             glassTiles = s.glassTiles,
             classicStrips = s.classicStrips,
             fadedTiles = s.fadedTiles,
-            preferIconTiles = s.preferIconTiles
+            preferIconTiles = s.preferIconTiles,
+            screensaverFolderPath = s.screensaverFolderPath
         )
     }
 }

@@ -432,3 +432,76 @@ says.**
   on boot is awkward to back out of.
 - **Artwork bitmap work belongs in `AppRepository`, on a background thread.** Never in
   composition. See §4.
+
+---
+
+## 9. Photo wall screensaver (S35)
+
+WMC-style: black background, thick white borders, a virtual "wall" of photos the camera pans
+and zooms across, focused photo in color while the rest is desaturated, grouped by capture
+date, occasional in-place cross-fade instead of a pan, date label on the focused photo.
+
+**Architecture:** a real Android TV screensaver (`android.service.dreams.DreamService`), not an
+in-app overlay — chosen deliberately so it fires system-wide after idle time from anywhere, the
+way WMC's own screensaver did. `PhotoWallDreamService` hosts a `ComposeView` by hand-rolling its
+own `LifecycleOwner`/`ViewModelStoreOwner`/`SavedStateRegistryOwner` (this app had never hosted
+Compose outside `ComponentActivity.setContent{}` before this) — the documented, still-current
+pattern for Compose in a non-Activity host; there is no AndroidX helper that does this
+automatically. `isInteractive = false` + `isFullscreen = true` makes any input dismiss the dream
+via the framework's own handling, no custom key code needed.
+
+**Rendering (`PhotoWallScreensaver.kt`):** the wall's photo cells are laid out once at natural
+size; the "camera" is one `graphicsLayer` transform (scale + translation, `transformOrigin`
+pinned to the wall's top-left so the math is a plain `screenCenter = scale·point + translation`)
+wrapping the whole thing — panning/zooming is compositor-only work, nothing is ever re-decoded
+or re-laid-out. Desaturation is Compose-native (`ColorFilter.colorMatrix`), no bitmap baking
+needed unlike `FadedArtwork.kt`'s tile approach — there are only ever a handful of cells, not
+dozens of recycled tiles, so the "bake once, cache forever" discipline that mattered for Home
+doesn't apply here.
+
+**`MotionDurationScale` fix, finally implemented (see §6's old roadmap item) — but scoped only
+to the screensaver**, not retrofitted onto Home's locked follower (out of scope per this
+project's own rule). Without it, this box's `animator_duration_scale` resetting to 0 after
+reboot would reduce the whole screensaver to instant hard cuts, defeating the point of building
+it. `androidx.compose.ui.MotionDurationScale` is the correct interface — **not**
+`androidx.compose.animation.core` (that package has no such type; the compiler error is
+"Unresolved reference" if you guess wrong, which is what happened writing this). There is also
+an `androidx.compose.foundation.FixedMotionDurationScale`, but it's `internal` (Kotlin's own
+`basicMarquee` implementation detail) and unreachable from application code — don't chase it.
+
+**Photo source:** a folder Lou points at (default `/sdcard/MCLauncher/Screensaver`,
+overridable in Settings), not MediaStore — this is a streaming box, not a phone with a camera
+roll. Capture date comes from EXIF `DateTimeOriginal` first, falling back to file
+`lastModified()` for anything EXIF-stripped (screenshots, downloads). No new storage permission
+needed — `MANAGE_EXTERNAL_STORAGE` was already granted for backup/restore (T2) and covers this
+folder too.
+
+**⚠️ This Google TV build's own screensaver picker does not list third-party dreams.**
+Google has replaced the generic AOSP "Screen saver" settings with its own "Ambient Screensaver"
+(Backdrop) UI at **Settings → System → Ambient mode**, whose "Source" list only ever shows
+Google's own options (Google Photos, Art Gallery, Custom AI art) — MCLauncher's dream never
+appears there, on this box, no matter how correctly it's registered. This was the biggest
+surprise of building this feature and cost real time to discover. The underlying mechanism
+still works, though: the classic `Settings.Secure.screensaver_components` value is what
+`DreamManagerService` actually reads, `Ambient mode`'s own "Start now" button reads that same
+value, and setting it via adb is confirmed to correctly launch our dream even though the
+"Source" picker can't see it:
+```bash
+adb shell settings put secure screensaver_components com.wmc.mediacenter/com.wmc.mediacenter.screensaver.PhotoWallDreamService
+adb shell settings put secure screensaver_enabled 1
+```
+`android.settings.DREAM_SETTINGS` and `android.settings.DISPLAY_SETTINGS` both fail to resolve
+on this box's Settings app too (confirmed via `adb shell am start -a ...`); only the bare
+`android.settings.SETTINGS` (main Settings screen) reliably resolves, which is what the in-app
+"Set as screen saver" row falls back to, with a toast pointing at System → Ambient mode.
+
+**Verified on-device:** date grouping (including the mtime-fallback path — no photo used in
+testing had EXIF, all came from Windows screenshots with genuinely distinct file dates), white
+borders, black background, date label, pan/zoom framing between multiple different day-groups,
+desaturation of unfocused cells (visually confirmed: an unfocused peripheral cell peeking into
+frame renders visibly grayscale next to the full-color focused one), day-group rotation,
+dismiss-on-any-input, and the missing-folder graceful message (no crash). The
+`animator_duration_scale = 0` case was verified by code review + the loop continuing to
+function correctly under it, not by catching a mid-transition screenshot — timing that
+precisely proved awkward to capture manually, and wasn't worth the time given the mechanism is
+confirmed correct by type-checking against the real interface.

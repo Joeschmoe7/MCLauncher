@@ -15,8 +15,8 @@ android {
         applicationId = "com.wmc.mediacenter"
         minSdk = 26
         targetSdk = 34
-        versionCode = 13
-        versionName = "0.8.2-hometask"
+        versionCode = 14
+        versionName = "0.9.0-screensaver"
 
         ndk {
             // Match the onn box's arm64 chip; armeabi-v7a kept for older Android TV devices.
@@ -90,4 +90,10 @@ dependencies {
     // P2: row config persistence.
     implementation("androidx.datastore:datastore-preferences:1.2.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
+
+    // S35 — screensaver: EXIF capture-date reads, and an explicit
+    // savedstate dependency (setViewTreeSavedStateRegistryOwner) rather than
+    // leaving it to resolve transitively.
+    implementation("androidx.exifinterface:exifinterface:1.3.7")
+    implementation("androidx.savedstate:savedstate-ktx:1.2.1")
 }

@@ -432,6 +432,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { settingsRepository.setPreferIconTiles(value) }
     }
 
+    fun setScreensaverFolderPath(value: String?) {
+        viewModelScope.launch { settingsRepository.setScreensaverFolderPath(value) }
+    }
+
     // --- Deep-link shortcut cards ------------------------------------------
 
     /** Creates a shortcut card (e.g. "Movies" → Channels DVR's Movies section) and appends it to [rowId]. */

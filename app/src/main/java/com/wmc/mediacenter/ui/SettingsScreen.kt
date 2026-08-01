@@ -50,7 +50,10 @@ fun SettingsScreen(
     onSetClassicStrips: (Boolean) -> Unit,
     onSetFadedTiles: (Boolean) -> Unit,
     onSetPreferIconTiles: (Boolean) -> Unit,
+    screensaverFolderPath: String,
     onPickStartupApp: () -> Unit,
+    onSetScreensaverFolder: () -> Unit,
+    onSetAsScreenSaver: () -> Unit,
     onResetSetup: () -> Unit,
     onBackup: () -> Unit,
     onRestore: () -> Unit
@@ -123,6 +126,20 @@ fun SettingsScreen(
             label = "Tile artwork",
             valueLabel = if (settings.preferIconTiles) "Icon" else "Banner",
             onClick = { onSetPreferIconTiles(!settings.preferIconTiles) }
+        )
+        SettingsRow(
+            // S35 — the folder the photo wall screensaver reads from.
+            label = "Screensaver photos folder",
+            valueLabel = screensaverFolderPath,
+            onClick = onSetScreensaverFolder
+        )
+        SettingsRow(
+            // S35 — this box's Google TV build doesn't list third-party
+            // screensavers in its own picker; jumping to Settings is the
+            // most we can do from here (System > Ambient mode from there).
+            label = "Set as screen saver",
+            valueLabel = null,
+            onClick = onSetAsScreenSaver
         )
         SettingsRow(
             // T2 — rows/shortcuts/settings to /sdcard/MCLauncher/, so a

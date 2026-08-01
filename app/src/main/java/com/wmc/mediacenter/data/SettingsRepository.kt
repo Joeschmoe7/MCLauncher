@@ -24,6 +24,7 @@ private val GLASS_TILES_KEY = booleanPreferencesKey("glass_tiles")
 private val CLASSIC_STRIPS_KEY = booleanPreferencesKey("classic_strips")
 private val FADED_TILES_KEY = booleanPreferencesKey("faded_tiles")
 private val PREFER_ICON_TILES_KEY = booleanPreferencesKey("prefer_icon_tiles")
+private val SCREENSAVER_FOLDER_PATH_KEY = stringPreferencesKey("screensaver_folder_path")
 
 // One-time flag: whether the default "Settings" row has been added to configs
 // that predate it. Guards the migration in MainViewModel so it runs at most
@@ -58,7 +59,8 @@ class SettingsRepository(private val context: Context) {
                 glassTiles = prefs[GLASS_TILES_KEY] ?: false,
                 classicStrips = prefs[CLASSIC_STRIPS_KEY] ?: true,
                 fadedTiles = prefs[FADED_TILES_KEY] ?: true,
-                preferIconTiles = prefs[PREFER_ICON_TILES_KEY] ?: false
+                preferIconTiles = prefs[PREFER_ICON_TILES_KEY] ?: false,
+                screensaverFolderPath = prefs[SCREENSAVER_FOLDER_PATH_KEY]
             )
         }
 
@@ -113,6 +115,13 @@ class SettingsRepository(private val context: Context) {
         context.launcherDataStore.edit { prefs -> prefs[PREFER_ICON_TILES_KEY] = value }
     }
 
+    /** Null clears the override (means "use the default folder"). */
+    suspend fun setScreensaverFolderPath(value: String?) {
+        context.launcherDataStore.edit { prefs ->
+            if (value.isNullOrBlank()) prefs.remove(SCREENSAVER_FOLDER_PATH_KEY) else prefs[SCREENSAVER_FOLDER_PATH_KEY] = value
+        }
+    }
+
     /**
      * T2 — restore: replaces every setting in ONE DataStore edit, so the
      * settingsFlow collector sees a single consistent emission rather than
@@ -136,6 +145,11 @@ class SettingsRepository(private val context: Context) {
             prefs[CLASSIC_STRIPS_KEY] = settings.classicStrips
             prefs[FADED_TILES_KEY] = settings.fadedTiles
             prefs[PREFER_ICON_TILES_KEY] = settings.preferIconTiles
+            if (settings.screensaverFolderPath.isNullOrBlank()) {
+                prefs.remove(SCREENSAVER_FOLDER_PATH_KEY)
+            } else {
+                prefs[SCREENSAVER_FOLDER_PATH_KEY] = settings.screensaverFolderPath
+            }
         }
     }
 

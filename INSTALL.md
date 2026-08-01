@@ -185,6 +185,34 @@ working (Google Play Protect occasionally switches off accessibility
 services for sideloaded apps), just re-run the two commands or re-enable it
 in Settings.
 
+### 6d. Optional — the photo wall screensaver
+
+A Windows Media Center–style screensaver: a wall of your photos with white
+borders, panning and zooming, the current photo in color while the rest fade
+to black and white.
+
+1. Copy some photos onto the box at `/sdcard/MCLauncher/Screensaver` — or
+   pick a different folder under MCLauncher's own **Settings → Screensaver
+   photos folder**.
+2. Select it as your screen saver. **This box's Google TV build hides
+   third-party screensavers from its own picker** — Settings → System →
+   Ambient mode only ever offers Google's own options, no matter how
+   correctly the app registers. One adb command sets it directly instead:
+
+   ```
+   adb -s DEVICE_IP:5555 shell settings put secure screensaver_components com.wmc.mediacenter/com.wmc.mediacenter.screensaver.PhotoWallDreamService
+   ```
+
+   ```
+   adb -s DEVICE_IP:5555 shell settings put secure screensaver_enabled 1
+   ```
+3. From MCLauncher's Settings, **Set as screen saver** jumps to the system
+   Settings app as a shortcut — from there, **Start now** under Ambient
+   Screensaver previews it immediately without waiting for idle timeout.
+
+No extra permission grant needed — it reuses the storage access already set
+up in step 6b. Survives reboots, not uninstalls, same as the others.
+
 ### 7. Test it properly
 
 **Unplug the device's power, wait five seconds, plug it back in.**

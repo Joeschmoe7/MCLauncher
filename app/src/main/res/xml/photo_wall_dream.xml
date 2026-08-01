@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- S35 — no settingsActivity: the photo folder path lives in MCLauncher's
+     own Settings screen instead of a picker-embedded gear icon. -->
+<dream xmlns:android="http://schemas.android.com/apk/res/android" />

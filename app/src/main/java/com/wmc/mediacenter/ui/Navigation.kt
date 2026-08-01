@@ -60,4 +60,7 @@ sealed interface DialogState {
 
     /** "+ Add shortcut" step 3: the deep-link URI to fire at the target app (e.g. channels://navigate/Movies). */
     data class EnterShortcutUri(val rowId: String, val targetPackage: String, val label: String) : DialogState
+
+    /** S35 — override the screensaver's photo folder (default shown as the initial value). */
+    data class SetScreensaverFolder(val currentPath: String) : DialogState
 }

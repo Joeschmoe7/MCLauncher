@@ -36,5 +36,12 @@ data class AppSettings(
      * On: tiles show the centered app icon instead — icons are usually
      * transparent-background logos, so this also reads better with fadedTiles.
      */
-    val preferIconTiles: Boolean = false
+    val preferIconTiles: Boolean = false,
+    /**
+     * S35 — folder the photo wall screensaver reads from. Null means "use
+     * the default" (`ScreensaverPhotoRepository.DEFAULT_FOLDER_PATH`,
+     * `/sdcard/MCLauncher/Screensaver`), consistent with the
+     * `/sdcard/MCLauncher/` convention BackupRepository already established.
+     */
+    val screensaverFolderPath: String? = null
 )

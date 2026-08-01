@@ -32,6 +32,7 @@ import com.wmc.mediacenter.RowUiState
 import com.wmc.mediacenter.apps.AppInfo
 import com.wmc.mediacenter.apps.SystemActions
 import com.wmc.mediacenter.data.ShortcutConfig
+import com.wmc.mediacenter.screensaver.ScreensaverPhotoRepository
 import com.wmc.mediacenter.ui.components.ContextMenuOverlay
 import com.wmc.mediacenter.ui.components.TextInputDialog
 
@@ -76,6 +77,9 @@ fun MCLauncherApp(viewModel: MainViewModel) {
     val startupAppLabel = settings.startupPackage
         ?.let { pkg -> allApps.find { it.packageName == pkg }?.label }
         ?: "None"
+
+    val screensaverFolderPath = settings.screensaverFolderPath
+        ?: ScreensaverPhotoRepository.DEFAULT_FOLDER_PATH
 
     // F3 — fires once per cold start when a startup package is configured;
     // the ViewModel resets startupTarget to null right after so re-entering
@@ -203,7 +207,23 @@ fun MCLauncherApp(viewModel: MainViewModel) {
                     onSetClassicStrips = viewModel::setClassicStrips,
                     onSetFadedTiles = viewModel::setFadedTiles,
                     onSetPreferIconTiles = viewModel::setPreferIconTiles,
+                    screensaverFolderPath = screensaverFolderPath,
                     onPickStartupApp = { contextMenu = ContextMenuState.StartupAppMenu },
+                    onSetScreensaverFolder = { dialog = DialogState.SetScreensaverFolder(screensaverFolderPath) },
+                    onSetAsScreenSaver = {
+                        try {
+                            context.startActivity(
+                                Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            )
+                            Toast.makeText(
+                                context,
+                                "Look for System > Ambient mode, then pick MCLauncher",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        } catch (e: ActivityNotFoundException) {
+                            Toast.makeText(context, "Couldn't open Settings", Toast.LENGTH_SHORT).show()
+                        }
+                    },
                     onResetSetup = { contextMenu = ContextMenuState.ConfirmResetSetup },
                     // T2 — backup is non-destructive, runs immediately;
                     // restore overwrites live config, so it confirms first.
@@ -368,6 +388,17 @@ fun MCLauncherApp(viewModel: MainViewModel) {
                         if (uri.isNotBlank()) {
                             viewModel.addShortcut(current.rowId, current.label, current.targetPackage, uri.trim())
                         }
+                        dialog = null
+                    },
+                    onDismiss = { dialog = null }
+                )
+
+                is DialogState.SetScreensaverFolder -> TextInputDialog(
+                    title = "Screensaver photos folder",
+                    initialValue = current.currentPath,
+                    confirmLabel = "Save",
+                    onConfirm = { path ->
+                        viewModel.setScreensaverFolderPath(path.trim().ifBlank { null })
                         dialog = null
                     },
                     onDismiss = { dialog = null }

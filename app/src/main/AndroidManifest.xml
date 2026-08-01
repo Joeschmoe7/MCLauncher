@@ -151,6 +151,31 @@
                 android:resource="@xml/home_watchdog_config" />
         </service>
 
+        <!--
+            S35 — WMC-style photo wall screensaver, as a real Android TV
+            screensaver (Daydream). See PhotoWallDreamService for the full
+            story. exported=true is required (targetSdk 34 mandates an
+            explicit value on any component with an intent-filter) and safe:
+            BIND_DREAM_SERVICE is a signature permission, so only the system
+            can actually bind — same shape as HomeWatchdogService above.
+            Selected by the user in Settings > Device Preferences > Screen
+            saver; no adb grant needed for that step. Registration fails
+            SILENTLY if this entry or the meta-data resource is wrong — the
+            dream just never appears in the picker, nothing in logcat points
+            at it.
+        -->
+        <service
+            android:name=".screensaver.PhotoWallDreamService"
+            android:exported="true"
+            android:permission="android.permission.BIND_DREAM_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.dreams.DreamService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.dream"
+                android:resource="@xml/photo_wall_dream" />
+        </service>
+
     </application>
 
 </manifest>
