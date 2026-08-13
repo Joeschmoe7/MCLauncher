@@ -19,3 +19,6 @@ local.properties
 *.mp4
 /art/
 /home.png
+
+# Local Claude Code tooling config — machine-specific absolute paths, not project config.
+.claude/

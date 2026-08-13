@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- This app IS the launcher: it needs the leanback feature, not touch. -->
     <uses-feature
@@ -83,6 +84,41 @@
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="29" />
 
+    <!--
+        S36 — OPTIONAL, and the app works without it. Declaring it costs
+        nothing: its protectionLevel is signature|privileged|development, so
+        it can never be granted by installing the app, only deliberately over
+        adb.
+
+          adb shell pm grant com.wmc.mediacenter android.permission.WRITE_SECURE_SETTINGS
+
+        With it, the "Photo wall screensaver" toggle can select the dream
+        itself by writing Settings.Secure.screensaver_components — which is
+        the ONLY way to select it at all on Google TV, whose Ambient mode
+        source list never shows third-party dreams (NOTES.md section 9). One
+        one-time grant replaces having to re-run adb every time the setting is
+        toggled.
+
+        Without it the toggle still works, it just can't finish the job: the
+        dream becomes available and MCLauncher shows the manual commands
+        instead. See ScreensaverSelection.
+
+        Survives reboots. Does NOT survive an uninstall.
+
+        tools:ignore="ProtectedPermissions" — lint flags this as an error
+        because a normal app can never be GRANTED it at install time. That is
+        true, and it is the entire point: the grant is a deliberate one-time
+        adb command (see above), never something installing the app can
+        acquire. ScreensaverSelection checks checkSelfPermission before every
+        use and degrades to "show the manual instructions" when it is absent,
+        so the ungranted case is the supported default rather than a broken
+        state. Suppressed here, at the single line it applies to, rather than
+        with a project-wide lint rule.
+    -->
+    <uses-permission
+        android:name="android.permission.WRITE_SECURE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
+
     <application
         android:allowBackup="false"
         android:banner="@mipmap/ic_launcher"
@@ -164,8 +200,19 @@
             dream just never appears in the picker, nothing in logcat points
             at it.
         -->
+        <!--
+            S36 — enabled="false" is deliberate: MCLauncher must not put
+            itself in the system's screensaver list, let alone change what
+            the user already has selected, just because it was installed.
+            The user opts in from MCLauncher Settings > "Photo wall
+            screensaver", which flips this component on via
+            ScreensaverAvailability and then explains that Android still
+            needs them to pick it. COMPONENT_ENABLED_STATE_DEFAULT therefore
+            means DISABLED for this component — see that file's isEnabled().
+        -->
         <service
             android:name=".screensaver.PhotoWallDreamService"
+            android:enabled="false"
             android:exported="true"
             android:permission="android.permission.BIND_DREAM_SERVICE">
             <intent-filter>

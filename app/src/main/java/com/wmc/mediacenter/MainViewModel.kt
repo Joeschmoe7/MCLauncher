@@ -22,6 +22,8 @@ import com.wmc.mediacenter.data.SettingsBackup
 import com.wmc.mediacenter.data.SettingsRepository
 import com.wmc.mediacenter.data.ShortcutConfig
 import com.wmc.mediacenter.data.buildSeedConfig
+import com.wmc.mediacenter.screensaver.ScreensaverAvailability
+import com.wmc.mediacenter.screensaver.ScreensaverSelection
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -104,6 +106,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             filter,
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
+
+        // S36 — component enabled-state is NOT part of DataStore and does not
+        // survive an uninstall/reinstall, and a restore-from-backup only
+        // rewrites the preference. Reconcile the two once per start so the
+        // stored preference is always what's actually in effect.
+        viewModelScope.launch {
+            val wanted = settingsRepository.settingsFlow.first().screensaverEnabled
+            val actual = withContext(Dispatchers.IO) { ScreensaverAvailability.isEnabled(application) }
+            if (wanted != actual) applyScreensaverEnabled(wanted, persist = false)
+        }
 
         viewModelScope.launch {
             combine(_apps, configRepository.configFlow) { apps, config -> apps to config }
@@ -436,20 +448,108 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { settingsRepository.setScreensaverFolderPath(value) }
     }
 
+    /**
+     * S36 — persists the preference AND applies it to the DreamService
+     * component, which is what actually adds/removes the photo wall from the
+     * system's screensaver picker. See ScreensaverAvailability.
+     */
+    /**
+     * [onEnabled] fires only when switching ON, reporting whether MCLauncher
+     * was also able to SELECT the dream itself (true) or whether the user
+     * still has to finish the job by hand (false) — see ScreensaverSelection.
+     */
+    fun setScreensaverEnabled(value: Boolean, onEnabled: (autoSelected: Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            val autoSelected = applyScreensaverEnabled(value, persist = true)
+            if (value) onEnabled(autoSelected)
+        }
+    }
+
+    /**
+     * S36 — "Set as screen saver": selects the dream directly when
+     * WRITE_SECURE_SETTINGS has been granted. Reports false when it couldn't,
+     * so the caller can fall back to opening Android's own Settings. Exists
+     * separately from the toggle because the grant is often run AFTER the
+     * screensaver was first switched on, and nothing would otherwise re-select
+     * it.
+     */
+    fun selectScreensaverNow(onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                ScreensaverSelection.select(getApplication())
+            }
+            if (result.selected) {
+                settingsRepository.setScreensaverPreviousDream(result.previousComponents)
+            }
+            onResult(result.selected)
+        }
+    }
+
+    /**
+     * The single place the preference and the component's enabled state are
+     * brought into agreement. Every writer of screensaverEnabled must go
+     * through here — the preference alone changes nothing the system can see,
+     * and the component alone is not persisted (it does not survive a
+     * reinstall).
+     *
+     * S36 review fix — setComponentEnabledSetting is a synchronous binder
+     * round-trip into PackageManagerService, so it belongs off the main
+     * thread: on the UI thread it drops frames on the Settings screen at the
+     * exact moment the user pressed the toggle, and adds a jank spike to cold
+     * start via the reconcile in init.
+     */
+    private suspend fun applyScreensaverEnabled(value: Boolean, persist: Boolean): Boolean {
+        if (persist) settingsRepository.setScreensaverEnabled(value)
+        val app = getApplication<Application>()
+        return withContext(Dispatchers.IO) {
+            if (value) {
+                // Enable the component BEFORE selecting it — pointing the
+                // system at a disabled dream is a state worth never creating.
+                ScreensaverAvailability.setEnabled(app, true)
+                val result = ScreensaverSelection.select(app)
+                if (result.selected) {
+                    settingsRepository.setScreensaverPreviousDream(result.previousComponents)
+                }
+                result.selected
+            } else {
+                // Release the slot first, while we can still recognise
+                // ourselves as the current selection, then withdraw the dream.
+                ScreensaverSelection.deselect(app, settings.value.screensaverPreviousDream)
+                ScreensaverAvailability.setEnabled(app, false)
+                false
+            }
+        }
+    }
+
     // --- Deep-link shortcut cards ------------------------------------------
 
-    /** Creates a shortcut card (e.g. "Movies" → Channels DVR's Movies section) and appends it to [rowId]. */
-    fun addShortcut(rowId: String, label: String, targetPackage: String, uri: String) {
+    /**
+     * Creates a shortcut card and appends it to [rowId]. Either [uri] (apps
+     * with their own scheme, e.g. Channels DVR's `channels://navigate/Movies`)
+     * or [stringExtras]/[booleanExtras] (apps that read plain Intent extras
+     * instead, e.g. Jellyfin's `ItemId` + `ItemIsUserView`) should be set —
+     * see [com.wmc.mediacenter.ui.launchShortcut].
+     */
+    fun addShortcut(
+        rowId: String,
+        label: String,
+        targetPackage: String,
+        uri: String? = null,
+        stringExtras: Map<String, String> = emptyMap(),
+        booleanExtras: Map<String, Boolean> = emptyMap()
+    ) {
         val trimmedLabel = label.trim().ifEmpty { "Shortcut" }
-        val trimmedUri = uri.trim()
-        if (trimmedUri.isEmpty()) return
+        val trimmedUri = uri?.trim()?.takeIf { it.isNotEmpty() }
+        if (trimmedUri == null && stringExtras.isEmpty() && booleanExtras.isEmpty()) return
         viewModelScope.launch {
             val current = configRepository.currentOrNull() ?: return@launch
             val shortcut = ShortcutConfig(
                 id = ShortcutConfig.newId(),
                 label = trimmedLabel,
                 targetPackage = targetPackage,
-                uri = trimmedUri
+                uri = trimmedUri,
+                stringExtras = stringExtras,
+                booleanExtras = booleanExtras
             )
             val updatedRows = current.rows.map { row ->
                 if (row.id == rowId) row.copy(packages = row.packages + shortcut.id) else row
@@ -502,7 +602,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 is BackupResult.Ok -> {
                     val backup = result.value
                     configRepository.save(backup.config)
-                    settingsRepository.replaceAll(backup.settings.toAppSettings())
+                    val restored = backup.settings.toAppSettings()
+                    settingsRepository.replaceAll(restored)
+                    // S36 review fix — replaceAll only rewrites the stored
+                    // preference. The DreamService component's enabled state
+                    // is separate OS-level state that the init-time reconcile
+                    // already passed over (it runs at process start, long
+                    // before this), so without this the Settings row would
+                    // read "On" while the photo wall stayed absent from the
+                    // system's screensaver list until the launcher was
+                    // restarted — and vice versa.
+                    applyScreensaverEnabled(restored.screensaverEnabled, persist = false)
                     val exported = backup.exportedAt?.let { " (from $it)" } ?: ""
                     onResult("Restored rows and settings$exported")
                 }

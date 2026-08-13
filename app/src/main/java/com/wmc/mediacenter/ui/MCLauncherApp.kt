@@ -33,7 +33,9 @@ import com.wmc.mediacenter.apps.AppInfo
 import com.wmc.mediacenter.apps.SystemActions
 import com.wmc.mediacenter.data.ShortcutConfig
 import com.wmc.mediacenter.screensaver.ScreensaverPhotoRepository
+import com.wmc.mediacenter.screensaver.ScreensaverSelection
 import com.wmc.mediacenter.ui.components.ContextMenuOverlay
+import com.wmc.mediacenter.ui.components.MessageDialog
 import com.wmc.mediacenter.ui.components.TextInputDialog
 
 /**
@@ -207,21 +209,35 @@ fun MCLauncherApp(viewModel: MainViewModel) {
                     onSetClassicStrips = viewModel::setClassicStrips,
                     onSetFadedTiles = viewModel::setFadedTiles,
                     onSetPreferIconTiles = viewModel::setPreferIconTiles,
+                    onSetScreensaverEnabled = { enabled ->
+                        // Turning it ON may or may not be the whole story
+                        // depending on whether WRITE_SECURE_SETTINGS was
+                        // granted, so the dialog is chosen from the result.
+                        // Turning it OFF needs no explanation: it goes away.
+                        viewModel.setScreensaverEnabled(enabled) { autoSelected ->
+                            dialog = DialogState.ScreensaverEnabledInfo(autoSelected)
+                        }
+                    },
                     screensaverFolderPath = screensaverFolderPath,
                     onPickStartupApp = { contextMenu = ContextMenuState.StartupAppMenu },
                     onSetScreensaverFolder = { dialog = DialogState.SetScreensaverFolder(screensaverFolderPath) },
+                    // S36 — try to just do it. With WRITE_SECURE_SETTINGS
+                    // granted this is a one-press operation; the fall-back to
+                    // opening Android's Settings is only for boxes without the
+                    // grant. This row is also how someone who ran the grant
+                    // AFTER first enabling the screensaver gets it selected —
+                    // nothing else would re-try it.
                     onSetAsScreenSaver = {
-                        try {
-                            context.startActivity(
-                                Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            )
-                            Toast.makeText(
-                                context,
-                                "Look for System > Ambient mode, then pick MCLauncher",
-                                Toast.LENGTH_LONG
-                            ).show()
-                        } catch (e: ActivityNotFoundException) {
-                            Toast.makeText(context, "Couldn't open Settings", Toast.LENGTH_SHORT).show()
+                        viewModel.selectScreensaverNow { selected ->
+                            if (selected) {
+                                Toast.makeText(
+                                    context,
+                                    "Photo wall is now your screensaver",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            } else {
+                                dialog = DialogState.ScreensaverEnabledInfo(autoSelected = false)
+                            }
                         }
                     },
                     onResetSetup = { contextMenu = ContextMenuState.ConfirmResetSetup },
@@ -381,12 +397,33 @@ fun MCLauncherApp(viewModel: MainViewModel) {
                 )
 
                 is DialogState.EnterShortcutUri -> TextInputDialog(
-                    title = "Deep link URI (e.g. channels://navigate/Movies)",
+                    title = "Deep link URI (e.g. channels://navigate/Movies) — leave blank for Jellyfin-style",
                     initialValue = "",
                     confirmLabel = "Add",
                     onConfirm = { uri ->
                         if (uri.isNotBlank()) {
-                            viewModel.addShortcut(current.rowId, current.label, current.targetPackage, uri.trim())
+                            viewModel.addShortcut(current.rowId, current.label, current.targetPackage, uri = uri.trim())
+                            dialog = null
+                        } else {
+                            dialog = DialogState.EnterShortcutItemId(current.rowId, current.targetPackage, current.label)
+                        }
+                    },
+                    onDismiss = { dialog = null }
+                )
+
+                is DialogState.EnterShortcutItemId -> TextInputDialog(
+                    title = "Jellyfin library ItemId (from Dashboard → Libraries, or the server API)",
+                    initialValue = "",
+                    confirmLabel = "Add",
+                    onConfirm = { itemId ->
+                        if (itemId.isNotBlank()) {
+                            viewModel.addShortcut(
+                                rowId = current.rowId,
+                                label = current.label,
+                                targetPackage = current.targetPackage,
+                                stringExtras = mapOf("ItemId" to itemId.trim()),
+                                booleanExtras = mapOf("ItemIsUserView" to true)
+                            )
                         }
                         dialog = null
                     },
@@ -403,6 +440,64 @@ fun MCLauncherApp(viewModel: MainViewModel) {
                     },
                     onDismiss = { dialog = null }
                 )
+
+                // Two very different messages. With WRITE_SECURE_SETTINGS
+                // granted there is genuinely nothing left to do, and saying so
+                // matters as much as the instructions do. Without it, the
+                // wording is deliberately blunt about Google TV — see NOTES.md
+                // section 9: on those builds the Ambient mode "Source" list
+                // only ever shows Google's own options and will NOT list
+                // MCLauncher however correctly the dream is registered, so
+                // "pick it there" would send people hunting for something that
+                // is never going to appear.
+                is DialogState.ScreensaverEnabledInfo -> if (current.autoSelected) {
+                    MessageDialog(
+                        title = "Photo wall screensaver is on",
+                        message = "It is now your screensaver — nothing else to set up.\n\n" +
+                            "Photos come from ${ScreensaverPhotoRepository.DEFAULT_FOLDER_PATH} " +
+                            "unless you change the folder in the row below. Drop JPEG, PNG or " +
+                            "WebP files in there over adb or a file manager.\n\n" +
+                            "Switching this back off hands the screensaver back to whatever " +
+                            "you had before.",
+                        confirmLabel = "Done",
+                        onConfirm = { dialog = null },
+                        dismissLabel = "Change photo folder",
+                        onDismiss = {
+                            dialog = DialogState.SetScreensaverFolder(screensaverFolderPath)
+                        }
+                    )
+                } else {
+                    MessageDialog(
+                        title = "One more step, outside MCLauncher",
+                        message = "The photo wall is now offered to Android as a screensaver, " +
+                            "but Android decides which screensaver actually runs and " +
+                            "MCLauncher has not been given permission to choose.\n\n" +
+                            "EASIEST: grant that permission once over adb, and MCLauncher " +
+                            "will do the rest by itself — now and in future:\n\n" +
+                            "${ScreensaverSelection.grantCommand(context)}\n\n" +
+                            "then come back and use \"Set as screen saver\" below.\n\n" +
+                            "BY HAND instead: on plain Android TV, Settings > Device " +
+                            "Preferences > Screen saver, then pick MCLauncher. On Google TV " +
+                            "the Ambient mode source list only shows Google's own options and " +
+                            "will not offer MCLauncher at all — there, the adb route above is " +
+                            "the only way.\n\n" +
+                            "Photos come from ${ScreensaverPhotoRepository.DEFAULT_FOLDER_PATH} " +
+                            "unless you change the folder below.",
+                        confirmLabel = "Open Android Settings",
+                        onConfirm = {
+                            try {
+                                context.startActivity(
+                                    Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                )
+                            } catch (e: ActivityNotFoundException) {
+                                Toast.makeText(context, "Couldn't open Settings", Toast.LENGTH_SHORT).show()
+                            }
+                            dialog = null
+                        },
+                        dismissLabel = "Later",
+                        onDismiss = { dialog = null }
+                    )
+                }
             }
         }
     }

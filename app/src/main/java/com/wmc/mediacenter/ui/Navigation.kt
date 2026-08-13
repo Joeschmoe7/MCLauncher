@@ -58,9 +58,23 @@ sealed interface DialogState {
     /** "+ Add shortcut" step 2: name the card (e.g. "Movies"). */
     data class EnterShortcutLabel(val rowId: String, val targetPackage: String) : DialogState
 
-    /** "+ Add shortcut" step 3: the deep-link URI to fire at the target app (e.g. channels://navigate/Movies). */
+    /** "+ Add shortcut" step 3: the deep-link URI to fire at the target app (e.g. channels://navigate/Movies). Left blank for apps like Jellyfin that use an item ID instead — see [EnterShortcutItemId]. */
     data class EnterShortcutUri(val rowId: String, val targetPackage: String, val label: String) : DialogState
+
+    /** "+ Add shortcut" step 3b: only shown when step 3's URI was left blank — a library/item ID sent as Jellyfin-style `ItemId` + `ItemIsUserView` extras instead of a URI. */
+    data class EnterShortcutItemId(val rowId: String, val targetPackage: String, val label: String) : DialogState
 
     /** S35 — override the screensaver's photo folder (default shown as the initial value). */
     data class SetScreensaverFolder(val currentPath: String) : DialogState
+
+    /**
+     * S36 — shown right after the user switches the photo wall screensaver ON.
+     *
+     * [autoSelected] is true when MCLauncher held WRITE_SECURE_SETTINGS and
+     * could point the system at the dream itself, so the dialog is a short
+     * confirmation. When false, enabling only made the dream AVAILABLE and the
+     * user still has to finish the job by hand — without saying so the toggle
+     * reads as broken, since it says "On" and nothing happens.
+     */
+    data class ScreensaverEnabledInfo(val autoSelected: Boolean) : DialogState
 }

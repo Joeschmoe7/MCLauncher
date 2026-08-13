@@ -1,10 +1,6 @@
 package com.wmc.mediacenter.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -111,26 +107,5 @@ fun TextInputDialog(
 
     LaunchedEffect(Unit) {
         runCatching { fieldFocusRequester.requestFocus() }
-    }
-}
-
-@Composable
-private fun DialogButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isFocused by interactionSource.collectIsFocusedAsState()
-
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (isFocused) WmcAccentCyan.copy(alpha = 0.25f) else Color.Transparent)
-            .border(
-                width = if (isFocused) 2.dp else 0.dp,
-                color = if (isFocused) WmcAccentCyan else Color.Transparent,
-                shape = RoundedCornerShape(8.dp)
-            )
-            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-    ) {
-        Text(text = label, color = if (isFocused) WmcAccentCyan else WmcTextPrimary, fontSize = 14.sp)
     }
 }

@@ -52,7 +52,10 @@ data class SettingsBackup(
     val classicStrips: Boolean = true,
     val fadedTiles: Boolean = true,
     val preferIconTiles: Boolean = false,
-    val screensaverFolderPath: String? = null
+    val screensaverFolderPath: String? = null,
+    // S36 — opt-in, so a backup written before this field existed restores
+    // as "off" rather than silently switching the screensaver on.
+    val screensaverEnabled: Boolean = false
 ) {
     fun toAppSettings() = AppSettings(
         use24HourClock = use24HourClock,
@@ -67,7 +70,8 @@ data class SettingsBackup(
         classicStrips = classicStrips,
         fadedTiles = fadedTiles,
         preferIconTiles = preferIconTiles,
-        screensaverFolderPath = screensaverFolderPath
+        screensaverFolderPath = screensaverFolderPath,
+        screensaverEnabled = screensaverEnabled
     )
 
     companion object {
@@ -84,7 +88,8 @@ data class SettingsBackup(
             classicStrips = s.classicStrips,
             fadedTiles = s.fadedTiles,
             preferIconTiles = s.preferIconTiles,
-            screensaverFolderPath = s.screensaverFolderPath
+            screensaverFolderPath = s.screensaverFolderPath,
+            screensaverEnabled = s.screensaverEnabled
         )
     }
 }

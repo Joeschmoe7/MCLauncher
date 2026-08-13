@@ -50,6 +50,7 @@ fun SettingsScreen(
     onSetClassicStrips: (Boolean) -> Unit,
     onSetFadedTiles: (Boolean) -> Unit,
     onSetPreferIconTiles: (Boolean) -> Unit,
+    onSetScreensaverEnabled: (Boolean) -> Unit,
     screensaverFolderPath: String,
     onPickStartupApp: () -> Unit,
     onSetScreensaverFolder: () -> Unit,
@@ -128,19 +129,32 @@ fun SettingsScreen(
             onClick = { onSetPreferIconTiles(!settings.preferIconTiles) }
         )
         SettingsRow(
-            // S35 — the folder the photo wall screensaver reads from.
-            label = "Screensaver photos folder",
-            valueLabel = screensaverFolderPath,
-            onClick = onSetScreensaverFolder
+            // S36 — Off disables the DreamService component, which removes
+            // the photo wall from the system's screensaver picker entirely
+            // (and hands the slot back to whatever else is selected) rather
+            // than just declining to draw. See ScreensaverAvailability.
+            label = "Photo wall screensaver",
+            valueLabel = if (settings.screensaverEnabled) "On" else "Off",
+            onClick = { onSetScreensaverEnabled(!settings.screensaverEnabled) }
         )
-        SettingsRow(
-            // S35 — this box's Google TV build doesn't list third-party
-            // screensavers in its own picker; jumping to Settings is the
-            // most we can do from here (System > Ambient mode from there).
-            label = "Set as screen saver",
-            valueLabel = null,
-            onClick = onSetAsScreenSaver
-        )
+        if (settings.screensaverEnabled) {
+            SettingsRow(
+                // S35 — the folder the photo wall screensaver reads from.
+                label = "Screensaver photos folder",
+                valueLabel = screensaverFolderPath,
+                onClick = onSetScreensaverFolder
+            )
+            SettingsRow(
+                // S35 — this box's Google TV build doesn't list third-party
+                // screensavers in its own picker; jumping to Settings is the
+                // most we can do from here (System > Ambient mode from there).
+                // S36 — only meaningful while the component is enabled: with
+                // it off the photo wall isn't in that picker to select.
+                label = "Set as screen saver",
+                valueLabel = null,
+                onClick = onSetAsScreenSaver
+            )
+        }
         SettingsRow(
             // T2 — rows/shortcuts/settings to /sdcard/MCLauncher/, so a
             // reinstall (e.g. the first release-signed build) isn't a total

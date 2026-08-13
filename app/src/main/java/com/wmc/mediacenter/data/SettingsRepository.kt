@@ -25,6 +25,8 @@ private val CLASSIC_STRIPS_KEY = booleanPreferencesKey("classic_strips")
 private val FADED_TILES_KEY = booleanPreferencesKey("faded_tiles")
 private val PREFER_ICON_TILES_KEY = booleanPreferencesKey("prefer_icon_tiles")
 private val SCREENSAVER_FOLDER_PATH_KEY = stringPreferencesKey("screensaver_folder_path")
+private val SCREENSAVER_ENABLED_KEY = booleanPreferencesKey("screensaver_enabled")
+private val SCREENSAVER_PREVIOUS_DREAM_KEY = stringPreferencesKey("screensaver_previous_dream")
 
 // One-time flag: whether the default "Settings" row has been added to configs
 // that predate it. Guards the migration in MainViewModel so it runs at most
@@ -60,7 +62,10 @@ class SettingsRepository(private val context: Context) {
                 classicStrips = prefs[CLASSIC_STRIPS_KEY] ?: true,
                 fadedTiles = prefs[FADED_TILES_KEY] ?: true,
                 preferIconTiles = prefs[PREFER_ICON_TILES_KEY] ?: false,
-                screensaverFolderPath = prefs[SCREENSAVER_FOLDER_PATH_KEY]
+                screensaverFolderPath = prefs[SCREENSAVER_FOLDER_PATH_KEY],
+                // S36 — opt-in; see AppSettings.screensaverEnabled.
+                screensaverEnabled = prefs[SCREENSAVER_ENABLED_KEY] ?: false,
+                screensaverPreviousDream = prefs[SCREENSAVER_PREVIOUS_DREAM_KEY]
             )
         }
 
@@ -122,6 +127,21 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
+    suspend fun setScreensaverEnabled(value: Boolean) {
+        context.launcherDataStore.edit { prefs -> prefs[SCREENSAVER_ENABLED_KEY] = value }
+    }
+
+    /** Null clears the remembered dream (means "nothing to hand back to"). */
+    suspend fun setScreensaverPreviousDream(value: String?) {
+        context.launcherDataStore.edit { prefs ->
+            if (value.isNullOrBlank()) {
+                prefs.remove(SCREENSAVER_PREVIOUS_DREAM_KEY)
+            } else {
+                prefs[SCREENSAVER_PREVIOUS_DREAM_KEY] = value
+            }
+        }
+    }
+
     /**
      * T2 — restore: replaces every setting in ONE DataStore edit, so the
      * settingsFlow collector sees a single consistent emission rather than
@@ -150,6 +170,12 @@ class SettingsRepository(private val context: Context) {
             } else {
                 prefs[SCREENSAVER_FOLDER_PATH_KEY] = settings.screensaverFolderPath
             }
+            prefs[SCREENSAVER_ENABLED_KEY] = settings.screensaverEnabled
+            // SCREENSAVER_PREVIOUS_DREAM_KEY is deliberately NOT touched here:
+            // it is device-local bookkeeping (which dream this box had before
+            // MCLauncher took the slot), so a backup from another box must not
+            // overwrite it — and clearing it would lose the ability to hand
+            // the screensaver back correctly. See AppSettings.
         }
     }
 

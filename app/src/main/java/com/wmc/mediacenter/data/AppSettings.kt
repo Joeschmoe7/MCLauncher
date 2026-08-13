@@ -43,5 +43,26 @@ data class AppSettings(
      * `/sdcard/MCLauncher/Screensaver`), consistent with the
      * `/sdcard/MCLauncher/` convention BackupRepository already established.
      */
-    val screensaverFolderPath: String? = null
+    val screensaverFolderPath: String? = null,
+    /**
+     * S36 — OFF by default, deliberately: installing a launcher is not
+     * consent to replace whatever screensaver someone already uses, and
+     * this one is opinionated enough (a photo wall wanting a folder of
+     * photos) that it should be opted into. Off keeps the DreamService
+     * component disabled, so the photo wall never appears in the system's
+     * screensaver picker and the user's existing choice is untouched. On
+     * enables the component and MCLauncher then explains that Android still
+     * needs them to select it — see
+     * [com.wmc.mediacenter.screensaver.ScreensaverAvailability] for why this
+     * is a component toggle and not something the dream just reads.
+     */
+    val screensaverEnabled: Boolean = false,
+    /**
+     * S36 — whatever `Settings.Secure.screensaver_components` pointed at
+     * before MCLauncher took the slot, so switching the screensaver back off
+     * can hand it back rather than just clearing it. Device-local bookkeeping,
+     * never shown in the UI and deliberately excluded from backup/restore — a
+     * component name from one box is meaningless on another.
+     */
+    val screensaverPreviousDream: String? = null
 )

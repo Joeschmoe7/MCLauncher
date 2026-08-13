@@ -17,6 +17,12 @@ two typed commands from a computer. You only ever do it once.
 Start with Part 1. Do Part 2 later, or never — the app is fully functional
 without it.
 
+> **In a hurry, and comfortable with a terminal?** `scripts/setup-device.sh`
+> (or `.ps1` on Windows) does the whole of Part 2 in one go — installs, grants
+> everything, sets the home screen, enables the watchdog, and creates the
+> photo folder. The rest of this page is the same thing done by hand, with an
+> explanation of each step. Read on if you'd rather know what you're changing.
+
 ---
 
 # Part 1 — Install the app
@@ -188,30 +194,65 @@ in Settings.
 ### 6d. Optional — the photo wall screensaver
 
 A Windows Media Center–style screensaver: a wall of your photos with white
-borders, panning and zooming, the current photo in color while the rest fade
-to black and white.
+borders, panning and zooming slowly, the focused photo in color while the rest
+stay black and white.
 
-1. Copy some photos onto the box at `/sdcard/MCLauncher/Screensaver` — or
-   pick a different folder under MCLauncher's own **Settings → Screensaver
-   photos folder**.
-2. Select it as your screen saver. **This box's Google TV build hides
-   third-party screensavers from its own picker** — Settings → System →
-   Ambient mode only ever offers Google's own options, no matter how
-   correctly the app registers. One adb command sets it directly instead:
+**It ships switched off and does not touch the screensaver you already use.**
+Installing a launcher is not a reason to replace one, so you have to ask for
+it. There are two steps, and skipping the first is the usual reason it appears
+to do nothing.
 
-   ```
-   adb -s DEVICE_IP:5555 shell settings put secure screensaver_components com.wmc.mediacenter/com.wmc.mediacenter.screensaver.PhotoWallDreamService
-   ```
+**1. Put some photos on the box.**
 
-   ```
-   adb -s DEVICE_IP:5555 shell settings put secure screensaver_enabled 1
-   ```
-3. From MCLauncher's Settings, **Set as screen saver** jumps to the system
-   Settings app as a shortcut — from there, **Start now** under Ambient
-   Screensaver previews it immediately without waiting for idle timeout.
+```
+adb -s DEVICE_IP:5555 push "C:\my photos\*.jpg" /sdcard/MCLauncher/Screensaver/
+```
 
-No extra permission grant needed — it reuses the storage access already set
-up in step 6b. Survives reboots, not uninstalls, same as the others.
+JPEG, PNG or WebP. A file manager or USB stick works just as well. You can
+point it somewhere else under MCLauncher's **Settings → Screensaver photos
+folder**. This needs the storage grant from step 6b — without it the
+screensaver reports "no photos found" however many photos are in the folder.
+
+**2. Switch it on: MCLauncher → Settings → Photo wall screensaver → On.**
+
+What happens next depends on your TV:
+
+- **If you ran the optional grant below**, that's it. MCLauncher selects
+  itself and tells you so. Nothing else to do.
+- **On plain Android TV**, finish up in Settings → Device Preferences →
+  Screen saver → MCLauncher.
+- **On Google TV, there is no way to do it from the TV at all.** That build
+  hides third-party screensavers from its own picker — Settings → System →
+  Ambient mode only ever offers Google's own options, no matter how correctly
+  the app registers. You need one of the adb routes below.
+
+**The optional grant (recommended — do this once and forget it):**
+
+```
+adb -s DEVICE_IP:5555 shell pm grant com.wmc.mediacenter android.permission.WRITE_SECURE_SETTINGS
+```
+
+This lets MCLauncher select and unselect its own screensaver, so the Settings
+toggle does the whole job — including on Google TV. It can only ever be given
+deliberately over adb; installing the app can't acquire it. After granting,
+open MCLauncher → Settings → **Set as screen saver**.
+
+**Or set it directly, without the grant:**
+
+```
+adb -s DEVICE_IP:5555 shell settings put secure screensaver_components com.wmc.mediacenter/com.wmc.mediacenter.screensaver.PhotoWallDreamService
+```
+
+```
+adb -s DEVICE_IP:5555 shell settings put secure screensaver_enabled 1
+```
+
+⚠️ Do step 2 **first**. These commands point the system at a screensaver that
+is still switched off inside MCLauncher, and the result is no screensaver at
+all — with nothing on screen to explain why.
+
+Switching the toggle back Off hands the screensaver back to whatever you had
+before. Survives reboots, not uninstalls, same as the others.
 
 ### 7. Test it properly
 

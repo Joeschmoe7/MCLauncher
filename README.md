@@ -21,6 +21,7 @@ access, no analytics.
 - All Apps grid, Edit Rows screen, per-app hide, uninstall from the launcher, launch-an-app-on-
   startup, and an optional Recent row.
 - Everything persists to DataStore; no account, no cloud, no permissions beyond package queries.
+- An optional WMC-style **photo wall screensaver** — off by default, see below.
 
 ## Requirements
 
@@ -29,16 +30,124 @@ access, no analytics.
 
 ---
 
-## Install (no development setup)
+## Install
 
-1. Grab `app-release.apk` from a release build (see below) or from whoever shared it with you.
-2. Get it onto the box — **Send Files to TV** (Play Store, install on phone + TV) is the easiest
-   route, or `adb install app-release.apk`.
-3. Open the file on the TV to install it.
-4. Press **Home** → Android asks which launcher to use → pick **MCLauncher → Always**.
-   - If no chooser appears (some firmware), sideload **Launcher Manager** and set it there.
-5. **Escape hatch:** the launcher's own "Google TV Home" tile switches back, and
-   *Settings → Apps → MCLauncher → clear defaults* always works.
+> **Just want to install it on a TV?** [`INSTALL.md`](INSTALL.md) is the click-by-click guide,
+> written for someone who has never used adb — including how to turn on developer options, find
+> the box's IP, and what each permission actually changes. This section is the short version for
+> people already comfortable with a terminal.
+
+Several of MCLauncher's features need permissions that **Android TV provides no settings UI for** —
+they can only be granted over adb. The app installs and runs without them, but it can't become
+your Home screen, backup/restore fails, and the screensaver finds no photos.
+
+### Recommended: one script, does everything
+
+With [adb](https://developer.android.com/tools/releases/platform-tools) installed and the box
+reachable (enable *Developer options → USB/network debugging* on the TV first):
+
+```bash
+./scripts/setup-device.sh 192.168.1.50
+```
+
+```powershell
+.\scripts\setup-device.ps1 192.168.1.50
+```
+
+Leave the IP off if the box is already attached over USB or `adb connect`. It is safe to re-run —
+and you **will** need to re-run it after any uninstall, since none of this survives one.
+
+The script installs the APK if it finds one at `app/build/outputs/apk/release/app-release.apk`
+(override with `APK=…` / `-Apk …`), then:
+
+| Step | Needed for | Without it |
+|---|---|---|
+| `set-home-activity` | The Home button opening MCLauncher | It stays an ordinary app in the apps list |
+| `SYSTEM_ALERT_WINDOW` | Coming back by itself after a power cycle | Box boots to the stock launcher |
+| `MANAGE_EXTERNAL_STORAGE` | Backup/restore, screensaver photos | Backup fails; screensaver shows "no photos found" |
+| `WRITE_SECURE_SETTINGS` | MCLauncher selecting its own screensaver (**optional**) | You select it by hand — impossible on Google TV, see below |
+| Home watchdog | Staying Home after a wake-from-sleep | Google TV Home reappears |
+
+None of these can be acquired by installing the app; every one needs a deliberate adb command.
+The watchdog is *appended* to the device's accessibility services, never written over the top —
+that setting is a single shared list, and overwriting it would switch off anything else the user
+depends on, TalkBack included.
+
+### Without adb
+
+Sideload the APK any way you like — **Send Files to TV** (install on phone + TV from the Play
+Store) is the easiest — and open it on the TV to install. It runs fine as an ordinary app from
+the apps list.
+
+Google TV does not let an ordinary app make itself the Home screen, so **the Home button will
+still open Google TV** and backup, the screensaver, and surviving a reboot won't be available.
+[`INSTALL.md`](INSTALL.md) explains the trade-off in full.
+
+> **Escape hatch:** the launcher's own "Google TV Home" tile switches back, and
+> *Settings → Apps → MCLauncher → clear defaults* always works.
+
+---
+
+## Photo wall screensaver (optional, off by default)
+
+A recreation of WMC's screensaver: a large virtual wall of your photos in cream mats with printed
+date captions, which a slow camera pans and zooms across, blooming the focused photo into colour
+while the rest of the wall stays desaturated. Photos are grouped by capture date, so a run of shots
+from one day is explored together before the wall dissolves to the next.
+
+It is a real Android TV screensaver (`DreamService`), not an in-app overlay, so it takes over
+system-wide after idle time the way WMC's did.
+
+**It ships disabled and does not touch your existing screensaver.** Installing a launcher is not
+consent to replace one.
+
+### Turning it on
+
+If you ran `setup-device` above, it's one step: **MCLauncher → Settings → Photo wall screensaver
+→ On.** That grant lets MCLauncher select itself, so there's nothing else to do.
+
+Without `WRITE_SECURE_SETTINGS`, MCLauncher can only make the screensaver *available* — Android
+decides which one runs, and you have to finish the job:
+
+- *Plain Android TV:* Settings → Device Preferences → Screen saver → MCLauncher.
+- *Google TV:* **the Ambient mode source list only ever shows Google's own options and will not
+  offer MCLauncher**, however correctly the screensaver is registered. There is no way to select
+  it from the UI at all. Either grant the permission —
+  ```bash
+  adb shell pm grant com.wmc.mediacenter android.permission.WRITE_SECURE_SETTINGS
+  ```
+  and then use *Settings → Set as screen saver* in MCLauncher, or set it directly:
+  ```bash
+  adb shell settings put secure screensaver_components com.wmc.mediacenter/.screensaver.PhotoWallDreamService
+  adb shell settings put secure screensaver_enabled 1
+  ```
+  ⚠️ Switch the toggle On *first*. These commands point the system at a screensaver that is
+  still disabled inside MCLauncher, and the result is no screensaver at all, with nothing on
+  screen to explain why.
+
+Switching it back Off in MCLauncher withdraws the screensaver and hands the slot back to whatever
+you had before.
+
+### Photos
+
+Read from a plain folder — `/sdcard/MCLauncher/Screensaver` by default, overridable in Settings.
+There is no MediaStore scan, no indexing and no cloud account:
+
+```bash
+adb push ~/photos/*.jpg /sdcard/MCLauncher/Screensaver/
+```
+
+JPEG, PNG and WebP. Capture date comes from EXIF `DateTimeOriginal`, falling back to the file's
+modified time for anything EXIF-stripped — that date is what the wall groups by and prints on
+each mat.
+
+> Reading this folder needs `MANAGE_EXTERNAL_STORAGE` (see Install). Without it the screensaver
+> reports "no photos found" no matter what is in the folder.
+
+> Motion is deliberately slow. On a 60Hz TV, panning quickly across a photo produces visible
+> eye-tracking smear no matter how sharply it is rendered — `TargetPanScreenVelocityPxPerSec` in
+> `PhotoWallScreensaver.kt` is the trade-off dial if you want it faster and blurrier, or slower and
+> crisper. See [`NOTES.md`](NOTES.md) §10 before changing the motion constants.
 
 ---
 

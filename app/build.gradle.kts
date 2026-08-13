@@ -15,8 +15,8 @@ android {
         applicationId = "com.wmc.mediacenter"
         minSdk = 26
         targetSdk = 34
-        versionCode = 14
-        versionName = "0.9.0-screensaver"
+        versionCode = 37
+        versionName = "0.9.23-screensaver"
 
         ndk {
             // Match the onn box's arm64 chip; armeabi-v7a kept for older Android TV devices.
@@ -27,6 +27,19 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = true
+            // R8 was shrinking code but not resources, so the APK shipped
+            // every unused drawable/string the dependencies bring along.
+            // Enabling this is what lint's NotShrinkingResources asks for.
+            //
+            // Safe here because nothing is looked up reflectively by name:
+            // the one indirect reference is the screensaver's
+            // @xml/photo_wall_dream, reached through a manifest <meta-data>
+            // element, and the shrinker parses the manifest as a root. Worth
+            // knowing that a dream whose meta-data resource goes missing
+            // fails SILENTLY (see PhotoWallDreamService) — so if resources
+            // ever do get over-shrunk, the symptom is the screensaver simply
+            // never appearing in the system list, with nothing in logcat.
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

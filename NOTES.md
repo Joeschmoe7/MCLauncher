@@ -505,3 +505,174 @@ dismiss-on-any-input, and the missing-folder graceful message (no crash). The
 function correctly under it, not by catching a mid-transition screenshot — timing that
 precisely proved awkward to capture manually, and wasn't worth the time given the mechanism is
 confirmed correct by type-checking against the real interface.
+
+---
+
+## 10. Screensaver motion, memory and opt-in (S36)
+
+Follow-on to §9, from a session spent chasing two complaints: "it stutters when scrolling" and
+"the pictures look blurry when scrolling". They had different causes, and the blurry one was
+misdiagnosed twice before the arithmetic was actually done. Read this before touching
+`PhotoWallScreensaver.kt`'s motion constants.
+
+### The blur was never a rendering problem
+
+**It is eye-tracked sample-and-hold smear, and it is a function of content velocity.** When the
+eye smoothly tracks something moving across a 60Hz sample-and-hold panel, each frame is held
+static for one refresh (16.7ms) while the eye keeps moving, smearing that frame across
+`velocity × 16.7ms` of retina. Nothing about how sharply the frame was rendered changes this.
+
+The arithmetic that should have been done on day one, for this wall at density 2.0 on a
+1920x1080 surface:
+
+- every cell is the same size, so `focusScale` is a **constant** (~1.45) — a hop between two
+  already-focused cells is a pure lateral pan with no zoom at all
+- mean hop between two uniformly-random cells on the 8x6 grid is ~2900 wall px, and
+  2900 × 1.45 = **~4200 px of screen travel**
+- the old duration model gave that ~5.2s, so ~810 px/s mean and ~1250 px/s peak under the easing
+- 1250 px/s ÷ 60Hz = **~21 px of smear per frame**; corner-to-corner hops reached ~37 px
+
+The root bug: `panDurationForDistance` measured travel in **wall** coordinates while the thing
+that has to stay slow is travel across the **screen**, and the conversion between them is the
+camera scale — 0.25 at overview, 1.45 at focus, a 5.8x swing that systematically under-timed
+exactly the moves happening at high zoom. Replaced by `panDurationForScreenTravel`, which times a
+move by its real screen-space distance against a target velocity.
+
+**`TargetPanScreenVelocityPxPerSec` is the knob.** Smear scales linearly with it. There is no
+setting that gives both fast pans and sharp ones on a sample-and-hold panel. The only escape from
+that trade is a dolly-out-pan-dolly-in arc (zoom out while traversing, so long hops cross the wall
+at low scale), which is not implemented.
+
+Corroboration that this was always the real complaint: slower motion had been asked for twice
+before, under a separate heading. "Moves too fast" and "blurry during movement" were one bug.
+
+The camera's zoom is interpolated in **log space** for the same family of reasons. Perceived zoom
+rate is `d(ln s)/dt`, so a linear ramp across a 0.25 → 1.45 range is perceived as ~5.8x faster at
+the pulled-back end; the pull-back to overview visibly accelerated into its finish, fighting the
+easing instead of being shaped by it.
+
+### Dead ends — do not repeat these
+
+1. **`FilterQuality.High` on the `drawImage` calls.** Cannot possibly do anything. On Android,
+   Compose's `FilterQuality` collapses to a single boolean — `AndroidPaint.android.kt` reads
+   `this.isFilterBitmap = value != FilterQuality.None`, with AOSP's own comment above it: "Framework
+   only supports bilinear filtering which maps to FilterQuality.low". Low, Medium and High are the
+   same value. There is **no mipmap path through `DrawScope.drawImage` on Android**;
+   `Bitmap.setHasMipMap(true)` at decode time is the only lever.
+2. **Supersampling, or "the layer is cached at low res and stretched".** It isn't.
+   `CompositingStrategy.Auto` only allocates an offscreen buffer when `alpha < 1f` or a
+   `RenderEffect` is set; neither `graphicsLayer` here does either, so the wall is re-rasterised at
+   final resolution every frame. Verified against the Compose 1.11.3 sources, not assumed.
+3. **Per-cell viewport culling** via `drawWithContent` reading camera state. Measured *worse* (73%
+   legacy-janky vs a 3.66% baseline) — it makes every cell's draw phase depend on state that changes
+   every frame during *any* pan, so all 48 redraw constantly, for a benefit that only ever existed
+   during overview, where nothing needs culling anyway.
+4. **Chasing frame pacing.** Aggregate numbers were already fine (50th %ile 10ms, 90th 20ms, 1.75%
+   legacy-janky). Single captured mid-pan frames look sharp — which is evidence *for* velocity smear
+   and *against* a rendering fault, since an aliasing or pacing problem would show in the still.
+
+### Memory: the decode target is the on-screen size, not the screen
+
+`DecodeSizeMultiplier` is a multiple of a photo's **actual focused on-screen footprint** (a cell's
+image area × `focusScale`, about 1184x795 here), not of screen resolution. Those are not the same
+thing — a photo never fills the screen — and sizing to 1920x1080 decoded ~1.9x more pixels than can
+ever be displayed, in every bitmap.
+
+`computeInSampleSize` derives its power-of-two step from the same fit factor `scaleToFit` uses. The
+stock AOSP snippet it started as halves only while *both* dimensions stay above their caps, which
+stops far too early on extreme aspect ratios: a 12000x1500 panorama failed `750 >= 795` on the first
+iteration and decoded at full size — a single **72MB** ARGB_8888 allocation — purely to hand
+`scaleToFit` something it immediately shrank to 1184x148.
+
+**`OutOfMemoryError` is an `Error`, not an `Exception`.** Decoding is the one place in this app that
+can genuinely exhaust the heap, so `decodeDownsampled` catches it explicitly; a bare
+`catch (e: Exception)` there lets one unlucky photo take down the whole DreamService.
+
+Bitmap residency is bounded to the group actually on screen, but **both** the outgoing and incoming
+group are briefly live during the reveal dissolve, so peak is about double the steady state. The
+eviction (`retainAll`) must therefore run *after* the dissolve completes, not before — evicting
+earlier blanks the cells mid-fade.
+
+### Turning it on and off (S36)
+
+The dream is declared `android:enabled="false"` in the manifest and opted into from MCLauncher
+Settings. Installing a launcher is not consent to replace someone's screensaver.
+
+**Why a component toggle and not a preference the dream reads:** an app cannot choose which
+screensaver Android runs by default, but it can always enable or disable its own components, and
+a disabled `DreamService` drops out of the system's list entirely. A
+preference the dream merely read would be strictly worse — it would still be listed and selectable,
+and "off" would mean it starts and then instantly dismisses itself, which looks like a crash.
+`PackageManager.DONT_KILL_APP` is not optional: without it the framework kills the launcher process
+to apply the change, at the exact moment the user pressed the toggle.
+
+Two pieces of state must be kept in agreement — the DataStore preference (persisted, backed up,
+shown in the UI) and the component's enabled state (real, but not persisted across a reinstall).
+Every writer goes through `MainViewModel.applyScreensaverEnabled`. There is a reconcile in `init`
+for reinstalls, and **restore-from-backup has to call it too**, since `replaceAll` only rewrites the
+preference — otherwise the Settings row reads "On" while the dream stays withdrawn until the
+launcher process restarts.
+
+`setComponentEnabledSetting` is a synchronous binder call into PackageManagerService — keep it off
+the main thread.
+
+### Selecting it automatically — WRITE_SECURE_SETTINGS
+
+Enabling the component is necessary but not sufficient, and on Google TV it is a dead end on its
+own: that build's Ambient mode source list still will not show the dream (§9), so there is no UI
+anywhere that can select it.
+
+`WRITE_SECURE_SETTINGS` closes that gap. Its protectionLevel is
+`signature|privileged|**development**`, and it is that last flag that lets `adb shell pm grant`
+hand it to an ordinary sideloaded app — the same mechanism Tasker and friends rely on. **Verified
+working on this box:** `pm grant` succeeds silently and `dumpsys package` then reports
+`WRITE_SECURE_SETTINGS: granted=true` for user 0. (A secondary `userId=10` shows `granted=false`;
+that is a separate profile and irrelevant.)
+
+With it, `ScreensaverSelection` writes `screensaver_components` and `screensaver_enabled` directly,
+so the in-app toggle finishes the whole job. Without it every method there degrades to "no" and the
+UI shows the manual commands instead. Installing the app can never acquire it, so this stays opt-in
+by construction — which is the point.
+
+Two traps worth knowing:
+
+- **Never record ourselves as the "previous" dream.** `screensaver_components` can already point at
+  us (a leftover enable, or someone setting it by hand). Saving that and later "restoring" it aims
+  the system at a dream we just disabled — no screensaver at all, rather than the user's old one.
+- **Order matters.** Enable the component *before* selecting it, and release the selection *before*
+  disabling the component, so the system is never pointed at a disabled dream.
+
+The remembered previous dream lives in DataStore but is deliberately **excluded from
+backup/restore** — a component name from one box is meaningless on another, and `replaceAll` must
+not clobber it.
+
+### One-time device setup is scripted
+
+`scripts/setup-device.sh` / `.ps1` install the APK and grant all three adb-only permissions
+(`SYSTEM_ALERT_WINDOW`, `MANAGE_EXTERNAL_STORAGE`, `WRITE_SECURE_SETTINGS`), create the photo
+folder, and are safe to re-run. This exists because the README used to document none of it: a
+new user following the old install steps got an app where backup/restore failed, cold-boot
+self-start failed, and the screensaver reported "no photos found" no matter what was in the
+folder — all three because of ungranted appops with no settings UI to grant them from.
+
+**Grants do not survive an uninstall.** Re-run the script after reinstalling.
+
+### Testing the dream on-device
+
+- **It cannot be force-started via adb on a production build.** `cmd dreams start-dreaming` fails
+  with `SecurityException: Must be root`. The only route is to shrink `screen_off_timeout` (e.g. to
+  15000) and genuinely wait, untouched, for real device idle. Restore it to `600000` afterwards.
+- **Do not poll with `adb shell dumpsys` while waiting for it to trigger.** Repeated calls close
+  together were observed resetting the idle timer, so the dream never activates and you get a false
+  "the screensaver is broken" scare. Poll sparsely (20s+), or not at all.
+- **`adb shell` cannot change this app's component state** (`SecurityException: Shell cannot change
+  component state`), so the Settings toggle cannot be exercised from the host — it has to be driven
+  through the UI. `pm query-services -a android.service.dreams.DreamService` is how to check whether
+  the dream is currently advertised to the system.
+- **adb path mangling under Git Bash / MSYS:** `adb shell` commands containing POSIX-looking remote
+  paths (`/sdcard/...`) get rewritten into Windows paths unless prefixed with
+  `export MSYS_NO_PATHCONV=1`. With that set, `adb push`/`pull`'s *host-side* path must then be given
+  in native Windows form (`C:\Users\...`), not `/c/Users/...`. Mixing this up costs a round-trip
+  every time.
+- Grants (screensaver selection, storage, overlay, accessibility watchdog) all survive
+  `adb install -r`; only a full uninstall requires re-applying them.

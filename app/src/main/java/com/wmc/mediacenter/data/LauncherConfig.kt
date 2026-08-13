@@ -18,9 +18,13 @@ data class RowConfig(
 
 /**
  * A user-defined "deep link" card: instead of just launching [targetPackage]
- * normally, it fires an explicit ACTION_VIEW intent at [uri] targeted at
- * that app — e.g. a "Movies" card that opens Channels DVR straight to its
- * Movies section (`channels://navigate/Movies`), or a Plex library section.
+ * normally, it fires an ACTION_VIEW intent targeted at that app carrying
+ * whichever of [uri] / [stringExtras] / [booleanExtras] the target expects —
+ * e.g. a "Movies" card that opens Channels DVR straight to its Movies
+ * section via [uri] (`channels://navigate/Movies`), or one that opens
+ * Jellyfin straight to a library via extras (`ItemId` + `ItemIsUserView`),
+ * since Jellyfin's Android TV app has no URI scheme of its own and reads
+ * plain Intent extras instead.
  *
  * Referenced from [RowConfig.packages] by [id], same as how a built-in
  * system-action card is referenced by its sentinel id (see SystemActions).
@@ -32,7 +36,9 @@ data class ShortcutConfig(
     val id: String,
     val label: String,
     val targetPackage: String,
-    val uri: String
+    val uri: String? = null,
+    val stringExtras: Map<String, String> = emptyMap(),
+    val booleanExtras: Map<String, Boolean> = emptyMap()
 ) {
     companion object {
         private const val ID_PREFIX = "wmc.shortcut."
