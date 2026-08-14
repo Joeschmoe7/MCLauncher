@@ -1,0 +1,17 @@
+# filename<TAB>epoch-seconds of capture. Applied to the extracted
+# file's last-modified time so the wall groups and captions these
+# by when they were actually taken. See DefaultPhotos.kt.
+01_Yosemite_meadows_2004_09_04.jpg	1094270400
+02_Olympic_National_Park_22477985263.jpg	1447736400
+03_Rocky_mountain_national_park.jpg	1544677200
+04_Crater_Lake_National_Park_HCP_October_13_2022_02.jpg	1665633600
+07_Mount_Rainier_s_wildflowers_6851616406.jpg	1122609600
+08_Everglades_Landscape_49833757502.jpg	1592193600
+09_Canyonlands_National_Park_Utah_35412253216.jpg	1497412800
+11_NASA_The_aurora_borealis_blankets_the_Earth.jpg	1730260800
+12_NASA_Glaciers_flow_downhill_from_the_Himalayas_nort.jpg	1779249600
+13_NASA_iss071e082698.jpg	1715832000
+14_NASA_Earth_Observations_taken_by_Expedition_30_crew.jpg	1326517200
+15_NASA_The_clear_blue_waters_surrounding_The_Bahamas.jpg	1721793600
+16_NASA_A_Picture_Postcard_From_Curiosity_s_Navcams.jpg	1637643600
+17_NASA_Hubble_Captures_Spectacular_Landscape_in_the_C.jpg	1512709200

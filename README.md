@@ -130,8 +130,15 @@ you had before.
 
 ### Photos
 
-Read from a plain folder — `/sdcard/MCLauncher/Screensaver` by default, overridable in Settings.
-There is no MediaStore scan, no indexing and no cloud account:
+**It works out of the box.** 17 landscape photos ship with the app — ten US national parks and
+seven from NASA (Earth from orbit, Mars, the Carina Nebula) — and are used automatically whenever
+your own photo folder is empty. Every one is public domain or CC0, so redistributing this app
+carries no attribution obligation; `app/src/main/assets/screensaver/CREDITS.txt` records the
+title, author, licence and source URL for each anyway. They're only unpacked to disk if you
+actually have no photos of your own, so they cost nothing if you do.
+
+Your own photos always win. They're read from a plain folder — `/sdcard/MCLauncher/Screensaver`
+by default, changeable in Settings. There is no MediaStore scan, no indexing and no cloud account:
 
 ```bash
 adb push ~/photos/*.jpg /sdcard/MCLauncher/Screensaver/
@@ -141,8 +148,22 @@ JPEG, PNG and WebP. Capture date comes from EXIF `DateTimeOriginal`, falling bac
 modified time for anything EXIF-stripped — that date is what the wall groups by and prints on
 each mat.
 
-> Reading this folder needs `MANAGE_EXTERNAL_STORAGE` (see Install). Without it the screensaver
-> reports "no photos found" no matter what is in the folder.
+> Reading this folder needs `MANAGE_EXTERNAL_STORAGE` (see Install). Without it your own photos
+> are invisible to the screensaver and it falls back to the bundled set — which lives in
+> app-private storage and needs no permission at all.
+
+### Using a USB drive
+
+**Settings → Screensaver photos folder** opens a browser rather than a text box, listing internal
+storage and any plugged-in drive, and showing how many photos are directly inside each folder as
+you arrow through them. (That count matters: the scan is not recursive, so a drive whose photos
+sit in `DCIM/2024/` needs that folder picked, not the drive root.)
+
+Inside a folder on a USB drive you get two choices:
+
+- **Copy these photos to this box** — then you can unplug the drive. Merges rather than replaces,
+  so copying twice is harmless and a second drive adds to the first one's photos.
+- **Use this folder** — reads straight off the drive, which has to stay plugged in.
 
 > Motion is deliberately slow. On a 60Hz TV, panning quickly across a photo produces visible
 > eye-tracking smear no matter how sharply it is rendered — `TargetPanScreenVelocityPxPerSec` in

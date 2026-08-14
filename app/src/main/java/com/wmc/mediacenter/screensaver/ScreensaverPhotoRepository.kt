@@ -21,6 +21,30 @@ data class ScreensaverPhoto(val file: File, val dateTaken: LocalDate)
 data class DayGroup(val date: LocalDate, val photos: List<ScreensaverPhoto>)
 
 /**
+ * S37 — outcome of [ScreensaverPhotoRepository.copyPhotos]. [error] is set only
+ * when nothing could be attempted at all (unreadable source, uncreatable
+ * destination); individual photo failures are counted in [failed] instead.
+ */
+data class CopyResult(
+    val copied: Int = 0,
+    val skipped: Int = 0,
+    val failed: Int = 0,
+    val error: String? = null
+) {
+    /** Message for the user — states what happened rather than just "done". */
+    fun summary(): String = when {
+        error != null -> error
+        copied == 0 && skipped > 0 && failed == 0 -> "Those $skipped photos are already on this box"
+        copied == 0 && failed == 0 -> "No photos found to copy"
+        else -> buildString {
+            append("Copied $copied photo${if (copied == 1) "" else "s"} to this box")
+            if (skipped > 0) append(", $skipped already there")
+            if (failed > 0) append(", $failed couldn't be read")
+        }
+    }
+}
+
+/**
  * S35 — folder-based photo source for the screensaver (deliberately NOT
  * MediaStore: this is a streaming box, not a phone with a camera roll — see
  * the AskUserQuestion decision in the S35 plan). Mirrors AppRepository's
@@ -106,6 +130,62 @@ class ScreensaverPhotoRepository {
             }
         }
         return buckets.map { (date, list) -> DayGroup(date, list.take(MaxPhotosPerDayGroup)) }
+    }
+
+    /**
+     * S37 — copies the image files sitting directly in [from] into [to], so a
+     * USB stick can be unplugged afterwards rather than living in the box
+     * forever.
+     *
+     * Deliberately NON-RECURSIVE, matching [scanFolder]: what gets copied is
+     * exactly what the screensaver would have read from that folder, so the
+     * count shown in the picker is the count that ends up on the device.
+     *
+     * MERGES rather than replaces — a same-named file of the same length is
+     * assumed to be the same photo and skipped, so copying twice is harmless
+     * and a second stick can be added to the first one's photos. Nothing is
+     * ever deleted from either side.
+     *
+     * A plain byte copy preserves EXIF, and the last-modified time is carried
+     * across explicitly, so both date sources [dateTakenOf] uses survive the
+     * trip. Per-file failures are counted rather than thrown — one unreadable
+     * photo on a flaky stick should not abandon the other forty.
+     *
+     * MUST be called off the main thread.
+     */
+    fun copyPhotos(from: File, to: File): CopyResult {
+        val sources = try {
+            from.listFiles { f -> f.isFile && f.extension.lowercase(Locale.US) in IMAGE_EXTENSIONS }
+        } catch (e: Exception) {
+            null
+        } ?: return CopyResult(error = "Couldn't read ${from.absolutePath}")
+
+        if (!to.isDirectory && !to.mkdirs()) {
+            return CopyResult(error = "Couldn't create ${to.absolutePath}")
+        }
+
+        var copied = 0
+        var skipped = 0
+        var failed = 0
+        for (source in sources) {
+            val target = File(to, source.name)
+            if (target.isFile && target.length() == source.length()) {
+                skipped++
+                continue
+            }
+            try {
+                source.inputStream().use { input ->
+                    target.outputStream().use { output -> input.copyTo(output) }
+                }
+                target.setLastModified(source.lastModified())
+                copied++
+            } catch (e: Exception) {
+                // Leave no half-written file behind to be decoded later.
+                runCatching { target.delete() }
+                failed++
+            }
+        }
+        return CopyResult(copied = copied, skipped = skipped, failed = failed)
     }
 
     /**
@@ -289,7 +369,12 @@ class ScreensaverPhotoRepository {
         // S35 correction — see scanFolder's doc comment: prevents the
         // single-photo-tiled-everywhere bug.
         private const val MinGroupSize = 8
-        private val IMAGE_EXTENSIONS = setOf("jpg", "jpeg", "png", "webp")
+        /**
+         * Public so FolderPickerScreen can count photos with exactly the same
+         * rule scanFolder uses — a picker that disagrees with the scanner about
+         * what counts as a photo is worse than no picker.
+         */
+        val IMAGE_EXTENSIONS = setOf("jpg", "jpeg", "png", "webp")
 
         // SimpleDateFormat is NOT thread-safe; discovery may run on any IO
         // thread, so hand out one per thread rather than sharing an instance

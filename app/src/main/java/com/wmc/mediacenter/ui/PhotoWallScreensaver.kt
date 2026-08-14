@@ -33,6 +33,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -41,6 +42,7 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.wmc.mediacenter.screensaver.DayGroup
+import com.wmc.mediacenter.screensaver.DefaultPhotos
 import com.wmc.mediacenter.screensaver.ScreensaverPhoto
 import com.wmc.mediacenter.screensaver.ScreensaverPhotoRepository
 import com.wmc.mediacenter.ui.theme.WmcTextPrimary
@@ -86,9 +88,20 @@ import kotlin.random.Random
 fun PhotoWallScreensaver(folderPath: String) {
     var scanState by remember { mutableStateOf<ScanState>(ScanState.Loading) }
 
+    val context = LocalContext.current
+
     LaunchedEffect(folderPath) {
         val groups = withContext(Dispatchers.IO) {
-            ScreensaverPhotoRepository().scanFolder(File(folderPath))
+            val repository = ScreensaverPhotoRepository()
+            // S37 — fall back to the bundled public-domain set rather than
+            // showing "no photos found" on a box nobody has copied anything
+            // onto. The user's own folder always wins when it has anything in
+            // it, and the bundled photos are only unpacked if this branch is
+            // actually reached, so they cost no disk for anyone using their
+            // own. See DefaultPhotos.
+            repository.scanFolder(File(folderPath)).ifEmpty {
+                repository.scanFolder(DefaultPhotos.ensureExtracted(context))
+            }
         }
         scanState = if (groups.isEmpty()) ScanState.Empty else ScanState.Loaded(groups)
     }

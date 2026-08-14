@@ -9,6 +9,14 @@ sealed interface Screen {
     data class EditRowDetail(val rowId: String) : Screen
     data class AppPicker(val rowId: String) : Screen
     data object Settings : Screen
+
+    /**
+     * S37 — browse to the screensaver's photo folder. A full screen rather than
+     * a dialog because it has to show storage devices, subfolders and a photo
+     * count per folder; see FolderPickerScreen for why the old free-text path
+     * box made a USB drive unusable in practice.
+     */
+    data class FolderPicker(val currentPath: String) : Screen
 }
 
 sealed interface ContextMenuState {
@@ -63,9 +71,6 @@ sealed interface DialogState {
 
     /** "+ Add shortcut" step 3b: only shown when step 3's URI was left blank — a library/item ID sent as Jellyfin-style `ItemId` + `ItemIsUserView` extras instead of a URI. */
     data class EnterShortcutItemId(val rowId: String, val targetPackage: String, val label: String) : DialogState
-
-    /** S35 — override the screensaver's photo folder (default shown as the initial value). */
-    data class SetScreensaverFolder(val currentPath: String) : DialogState
 
     /**
      * S36 — shown right after the user switches the photo wall screensaver ON.

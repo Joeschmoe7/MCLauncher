@@ -103,6 +103,7 @@ fun MCLauncherApp(viewModel: MainViewModel) {
             dialog != null -> dialog = null
             contextMenu != null -> contextMenu = null
             currentScreen is Screen.AppPicker -> screen = Screen.EditRowDetail(currentScreen.rowId)
+            currentScreen is Screen.FolderPicker -> screen = Screen.Settings
             currentScreen is Screen.EditRowDetail -> screen = Screen.EditRows
             currentScreen == Screen.EditRows -> screen = Screen.Home
             currentScreen == Screen.AllApps -> screen = Screen.Home
@@ -196,6 +197,19 @@ fun MCLauncherApp(viewModel: MainViewModel) {
                     )
                 }
 
+                is Screen.FolderPicker -> FolderPickerScreen(
+                    initialPath = targetScreen.currentPath,
+                    onPick = { path, message ->
+                        viewModel.setScreensaverFolderPath(path)
+                        // Set by the "copy to this box" path, which has a
+                        // result worth reporting (how many landed, how many
+                        // were already there); plain folder picks pass null.
+                        message?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
+                        screen = Screen.Settings
+                    },
+                    onCancel = { screen = Screen.Settings }
+                )
+
                 Screen.Settings -> SettingsScreen(
                     settings = settings,
                     versionName = BuildConfig.VERSION_NAME,
@@ -220,7 +234,8 @@ fun MCLauncherApp(viewModel: MainViewModel) {
                     },
                     screensaverFolderPath = screensaverFolderPath,
                     onPickStartupApp = { contextMenu = ContextMenuState.StartupAppMenu },
-                    onSetScreensaverFolder = { dialog = DialogState.SetScreensaverFolder(screensaverFolderPath) },
+                    // S37 — a browser screen, not a text box; see FolderPickerScreen.
+                    onSetScreensaverFolder = { screen = Screen.FolderPicker(screensaverFolderPath) },
                     // S36 — try to just do it. With WRITE_SECURE_SETTINGS
                     // granted this is a one-press operation; the fall-back to
                     // opening Android's Settings is only for boxes without the
@@ -430,17 +445,6 @@ fun MCLauncherApp(viewModel: MainViewModel) {
                     onDismiss = { dialog = null }
                 )
 
-                is DialogState.SetScreensaverFolder -> TextInputDialog(
-                    title = "Screensaver photos folder",
-                    initialValue = current.currentPath,
-                    confirmLabel = "Save",
-                    onConfirm = { path ->
-                        viewModel.setScreensaverFolderPath(path.trim().ifBlank { null })
-                        dialog = null
-                    },
-                    onDismiss = { dialog = null }
-                )
-
                 // Two very different messages. With WRITE_SECURE_SETTINGS
                 // granted there is genuinely nothing left to do, and saying so
                 // matters as much as the instructions do. Without it, the
@@ -463,7 +467,8 @@ fun MCLauncherApp(viewModel: MainViewModel) {
                         onConfirm = { dialog = null },
                         dismissLabel = "Change photo folder",
                         onDismiss = {
-                            dialog = DialogState.SetScreensaverFolder(screensaverFolderPath)
+                            dialog = null
+                            screen = Screen.FolderPicker(screensaverFolderPath)
                         }
                     )
                 } else {

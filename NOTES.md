@@ -676,3 +676,47 @@ folder — all three because of ungranted appops with no settings UI to grant th
   every time.
 - Grants (screensaver selection, storage, overlay, accessibility watchdog) all survive
   `adb install -r`; only a full uninstall requires re-applying them.
+
+### Photo source: browsing, copying, and the bundled default set (S37)
+
+Three related gaps, all stemming from the folder being a free-text path box.
+
+**A USB drive was unreachable in practice.** Removable volumes mount at a path derived from the
+drive's FAT volume serial (`/storage/1A2B-3C4D`). Nothing on an Android TV displays that string —
+the system's Storage settings show a drive's *label*, never its path — so the only way to learn it
+was `adb shell ls /storage/`, and then it had to be typed on an on-screen keyboard with a remote.
+Replaced by `FolderPickerScreen`. Volume discovery is `Context.getExternalFilesDirs(null)` with the
+`/Android/data/<pkg>/files` tail stripped off each entry: that returns one path per mounted volume,
+works on every API level here, and needs no permission, unlike `StorageVolume.getDirectory()` which
+is API 30+. `StorageManager` is consulted only for friendlier labels.
+
+**`scanFolder` is not recursive**, so picking a drive whose photos live in `DCIM/2024/` gave "no
+photos found" with nothing explaining why. The picker shows a photo count per folder, computed with
+the same extension rule the scanner uses — a picker that disagrees with the scanner about what
+counts as a photo would be worse than none. Count it on the IO dispatcher, not in the list body:
+in composition it runs on the main thread on every recompose.
+
+**The drive had to stay plugged in.** `copyPhotos` merges a folder's images into internal storage —
+same name and length is treated as the same photo and skipped, so copying twice is harmless and a
+second drive adds to the first's photos. Nothing is deleted on either side. Byte copy preserves
+EXIF and the modified time is carried over explicitly, so both date sources survive.
+
+**Bundled defaults.** 17 public-domain/CC0 landscapes (national parks via Commons, Earth-from-orbit
+and planetary frames via NASA's image library) live in `assets/screensaver/`, extracted lazily into
+**app-private** storage when the configured folder scans empty. App-private matters: it needs no
+permission, so the default set still works on an install where `MANAGE_EXTERNAL_STORAGE` was never
+granted — precisely the box that has nothing set up and most needs a fallback.
+
+Two things worth knowing if the set is ever regenerated:
+
+- **Filter on brightness, not just licence.** Two NASA frames that read beautifully at full size
+  (an orbital sunrise, Saturn against black) have mean luminance of 3 and 27 out of 255 — on a wall
+  of 48 desaturated cells they are black rectangles. Look at a contact sheet before accepting
+  anything. The same pass caught an animal close-up, a scanned slide, and a shot straight up a tree
+  trunk that a licence filter happily accepted.
+- **Resizing strips EXIF**, so capture dates ship separately in `assets/screensaver/dates.txt` and
+  are applied to each file's last-modified time on extraction. Without that every bundled photo
+  would caption with the install date, and they would all land in one day-group.
+
+Licences are recorded in `assets/screensaver/CREDITS.txt`. Attribution is not required for any of
+them — that is the point of restricting to PD/CC0 — but it is recorded so each one can be verified.

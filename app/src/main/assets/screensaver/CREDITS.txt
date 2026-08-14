@@ -1,0 +1,114 @@
+Bundled screensaver photos
+==========================
+
+Every photo here is public domain or CC0 - free to use, redistribute and
+modify with no attribution required. Credit is given anyway because it is
+the decent thing to do, and because it records where to verify each one.
+
+Sourced from Wikimedia Commons and NASA's image library (NASA material is a
+US Government work and not subject to copyright). Resized to 1600px on the
+long edge, which is why EXIF is absent — capture dates travel in dates.txt
+instead and are applied on extraction.
+
+01_Yosemite_meadows_2004_09_04.jpg
+    Title:   Yosemite meadows 2004-09-04.jpg
+    Author:  Jon Sullivan
+    Licence: Public domain
+    Source:  https://commons.wikimedia.org/wiki/File:Yosemite_meadows_2004-09-04.jpg
+
+02_Olympic_National_Park_22477985263.jpg
+    Title:   Olympic National Park (22477985263).jpg
+    Author:  Olympic National Park
+    Licence: Public domain
+    Source:  https://commons.wikimedia.org/wiki/File:Olympic_National_Park_(22477985263).jpg
+
+03_Rocky_mountain_national_park.jpg
+    Title:   Rocky mountain national park.jpg
+    Author:  NPS Natural Resources
+    Licence: Public domain
+    Source:  https://commons.wikimedia.org/wiki/File:Rocky_mountain_national_park.jpg
+
+04_Crater_Lake_National_Park_HCP_October_13_2022_02.jpg
+    Title:   Crater Lake National Park - HCP - October 13, 2022 - 022.jpg
+    Author:  Vulturesong
+    Licence: CC0
+    Source:  https://commons.wikimedia.org/wiki/File:Crater_Lake_National_Park_-_HCP_-_October_13,_2022_-_022.jpg
+
+05_Denali_National_Park_and_Preserve_AK2006_0373.jpg
+    Title:   Denali National Park and Preserve AK2006-0373.jpg
+    Author:  National Park Service Digital Image Archives
+    Licence: Public domain
+    Source:  https://commons.wikimedia.org/wiki/File:Denali_National_Park_and_Preserve_AK2006-0373.jpg
+
+06_Big_Bend_National_Park_PB112599.jpg
+    Title:   Big Bend National Park PB112599.jpg
+    Author:  National Park Service Digital Image Archives
+    Licence: Public domain
+    Source:  https://commons.wikimedia.org/wiki/File:Big_Bend_National_Park_PB112599.jpg
+
+07_Mount_Rainier_s_wildflowers_6851616406.jpg
+    Title:   Mount Rainier's wildflowers (6851616406).jpg
+    Author:  Mount Rainier National Park from Ashford, WA, United States
+    Licence: Public domain
+    Source:  https://commons.wikimedia.org/wiki/File:Mount_Rainier%27s_wildflowers_(6851616406).jpg
+
+08_Everglades_Landscape_49833757502.jpg
+    Title:   Everglades Landscape (49833757502).jpg
+    Author:  evergladesnps
+    Licence: Public domain
+    Source:  https://commons.wikimedia.org/wiki/File:Everglades_Landscape_(49833757502).jpg
+
+09_Canyonlands_National_Park_Utah_35412253216.jpg
+    Title:   Canyonlands National Park, Utah (35412253216).jpg
+    Author:  NPS Natural Resources
+    Licence: Public domain
+    Source:  https://commons.wikimedia.org/wiki/File:Canyonlands_National_Park,_Utah_(35412253216).jpg
+
+10_Redwood_National_Park_REDW2653.jpg
+    Title:   Redwood National Park REDW2653.jpg
+    Author:  National Park Service Digital Image Archives
+    Licence: Public domain
+    Source:  https://commons.wikimedia.org/wiki/File:Redwood_National_Park_REDW2653.jpg
+
+11_NASA_The_aurora_borealis_blankets_the_Earth.jpg
+    Title:   NASA:The aurora borealis blankets the Earth
+    Author:  JSC
+    Licence: Public domain (NASA)
+    Source:  https://images.nasa.gov/details-iss072e159172
+
+12_NASA_Glaciers_flow_downhill_from_the_Himalayas_nort.jpg
+    Title:   NASA:Glaciers flow downhill from the Himalayas’ northern slopes onto China's Tibetan Plateau
+    Author:  JSC
+    Licence: Public domain (NASA)
+    Source:  https://images.nasa.gov/details-iss074e0603582
+
+13_NASA_iss071e082698.jpg
+    Title:   NASA:iss071e082698
+    Author:  JSC
+    Licence: Public domain (NASA)
+    Source:  https://images.nasa.gov/details-iss071e082698
+
+14_NASA_Earth_Observations_taken_by_Expedition_30_crew.jpg
+    Title:   NASA:Earth Observations taken by Expedition 30 crewmember
+    Author:  JSC
+    Licence: Public domain (NASA)
+    Source:  https://images.nasa.gov/details-iss030e034228
+
+15_NASA_The_clear_blue_waters_surrounding_The_Bahamas.jpg
+    Title:   NASA:The clear blue waters surrounding The Bahamas
+    Author:  JSC
+    Licence: Public domain (NASA)
+    Source:  https://images.nasa.gov/details-iss071e449837
+
+16_NASA_A_Picture_Postcard_From_Curiosity_s_Navcams.jpg
+    Title:   NASA:A Picture Postcard From Curiosity's Navcams
+    Author:  JPL
+    Licence: Public domain (NASA)
+    Source:  https://images.nasa.gov/details-PIA24937
+
+17_NASA_Hubble_Captures_Spectacular_Landscape_in_the_C.jpg
+    Title:   NASA:Hubble Captures Spectacular "Landscape" in the Carina Nebula
+    Author:  GSFC
+    Licence: Public domain (NASA)
+    Source:  https://images.nasa.gov/details-GSFC_20171208_Archive_e002076
+
