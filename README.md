@@ -12,6 +12,13 @@ access, no analytics.
 ![status](https://img.shields.io/badge/status-working%20daily%20driver-brightgreen)
 [![licence](https://img.shields.io/badge/licence-MIT-blue)](LICENSE)
 
+![The Movies row focused, with Netflix selected](docs/screenshots/home-movies-focused.jpg)
+
+Moving down to the next row: the focused strip glides up to the same fixed line and opens, while
+the rest collapse to their titles. The highlight never moves — the tiles slide through it.
+
+![The TV row focused, with Channels selected](docs/screenshots/home-tv-focused.jpg)
+
 ---
 
 ## What it does
