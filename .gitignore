@@ -22,3 +22,8 @@ local.properties
 
 # Local Claude Code tooling config — machine-specific absolute paths, not project config.
 .claude/
+
+# Private working notes. LAUNCHER_PLAYBOOK.md is kept outside this repo on purpose
+# (it was purged from history); this guard exists so copying it back in for a build
+# can't silently republish it.
+LAUNCHER_PLAYBOOK.md
