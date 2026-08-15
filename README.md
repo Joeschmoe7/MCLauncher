@@ -8,7 +8,9 @@ Built for a Walmart **onn 4K Google TV** box (a deliberately low-end target — 
 tile GPU). It is an app-tile launcher only: no video playback, no metadata scraping, no network
 access, no analytics.
 
+[![Build](https://github.com/Joeschmoe7/MCLauncher/actions/workflows/build.yml/badge.svg)](https://github.com/Joeschmoe7/MCLauncher/actions/workflows/build.yml)
 ![status](https://img.shields.io/badge/status-working%20daily%20driver-brightgreen)
+[![licence](https://img.shields.io/badge/licence-MIT-blue)](LICENSE)
 
 ---
 
@@ -237,5 +239,8 @@ app rather than guessing at it.
 
 ## Licence
 
-Personal project. Bundled [Selawik](https://github.com/microsoft/Selawik) font is SIL OFL
-(see `app/src/main/assets/fonts/SELAWIK-LICENSE.txt`).
+MIT — see [`LICENSE`](LICENSE).
+
+Bundled assets keep their own terms: the [Selawik](https://github.com/microsoft/Selawik) font is
+SIL OFL (`app/src/main/assets/fonts/SELAWIK-LICENSE.txt`), and the screensaver photographs are
+public domain or CC0, itemised in `app/src/main/assets/screensaver/CREDITS.txt`.
