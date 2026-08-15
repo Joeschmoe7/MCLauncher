@@ -1,0 +1,42 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# This workflow verifies that the project compiles and that a release build
+# survives R8. It deliberately does NOT publish the APK it produces.
+#
+# The release build type is signed with the *debug* key (app/build.gradle.kts),
+# which on a CI runner is auto-generated fresh and therefore differs from the
+# one on the maintainer's machine. An APK published from here would fail to
+# install over any existing MCLauncher as a signature mismatch, and updating
+# would mean uninstalling first — which wipes the user's rows and settings.
+# Release APKs are built locally and uploaded to the GitHub release by hand.
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Assemble release
+        run: ./gradlew :app:assembleRelease --no-daemon
+
+      - name: Report APK size
+        run: |
+          apk=app/build/outputs/apk/release/app-release.apk
+          echo "### APK: $(du -h "$apk" | cut -f1)" >> "$GITHUB_STEP_SUMMARY"
