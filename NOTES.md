@@ -344,8 +344,11 @@ Ranked. Nothing here is required — the launcher is a working daily driver.
    - `AppTile`'s breathing glow allocates **two `Brush.verticalGradient` objects per frame** —
      the pulse is read inside `onDrawBehind`, so `drawWithCache` caches nothing. Hoist the
      brushes and apply the pulse as `graphicsLayer { alpha = … }`.
-   - The follower's `while (true) { withFrameNanos { … } }` and the infinite glow transition mean
-     the app **never idles**; the Choreographer stays awake at 60 Hz forever.
+   - ~~The app never idles~~ — **DONE 2026-10-01.** Measured first: idle on Home the app drew
+     ~63 fps and used ~35% of a core. The glow now settles after 20 s with no key press
+     (`rememberGlowPulse` / `LocalGlowPulseActive`, any key wakes it) and the follower suspends
+     on a `snapshotFlow` once settled instead of polling `withFrameNanos`. Measured after:
+     0 frames, 0% CPU while idle.
 3. **Replace the follower with one deterministic transition.** Only worth doing if up-vs-down
    asymmetry resurfaces. Animate a single fractional focused-index `f` with one `Animatable`,
    and derive everything from it as a pure function:
@@ -418,12 +421,25 @@ says.**
   `Type.kt`. Absent, it silently falls back to sans-serif and the app stops looking like WMC.
 - **`ContextMenuOverlay` long-press gate:** it swallows confirm-key events until the first
   key-*up*, so the long-press that opened the menu doesn't instantly select an option.
-  Auto-repeat key-downs were the subtle part.
+  Auto-repeat key-downs were the subtle part. A *fresh* key-down (`repeatCount == 0`) arms it
+  immediately — otherwise menus opened by a short click (Restore, Delete row, ...) ate the
+  user's first OK. The overlay also handles Back itself: left to `BackHandler`, the first Back
+  only moved focus out of the scrolling option list.
+- **`focusRestorer()` on every screen's main list** (Home's LazyColumn and each LazyRow, All
+  Apps, Edit Rows, Edit Row, Settings). Closing a menu removes the focused option; without it
+  focus fell to the first visible item, so the next key acted on the wrong card.
 - **`NoFocusScrollSpec`** must stay while the follower owns vertical position — removing it lets
   lateral D-pad moves bounce the whole screen.
-- **Never prune a row's package on doubt.** `AppRepository.isInstalled()` treats an unknown
-  failure as "still installed"; a transient discovery failure used to permanently delete
-  leanback-only apps from saved rows.
+- **Never prune rows at all.** Rows keep entries for apps that aren't installed;
+  `buildUiState` just skips them. Pruning (even "only when confirmed gone") deleted slots
+  permanently after a restore onto a box whose apps weren't reinstalled yet, and lost an app's
+  place on uninstall/reinstall. `moveWithinRow` steps over the invisible entries.
+- **Config edits go through `LauncherConfigRepository.update`** (one DataStore transaction).
+  A separate read + save let two quick edits read the same state and lose one.
+- **The last Edit Rows / Settings card can't be removed** (`SystemActions.ESSENTIAL`), and a
+  config missing one is healed on load — they are the only way back into setup.
+- **Auto-backup only follows user edits**, never seeding/heal/restore/reset — backing up a
+  fresh install's seed config would overwrite the real backup before it could be restored.
 - **DataStore flows have `.catch`** guards — without them a corrupt prefs file kills the
   collector and settings silently stop updating for the process lifetime.
 - **ProGuard rules for kotlinx.serialization** are required and now present. They were a P1

@@ -3,6 +3,7 @@ package com.wmc.mediacenter.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -20,6 +21,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -66,6 +68,10 @@ fun SettingsScreen(
             // The option list has outgrown a TV screen — scroll, with D-pad
             // focus dragging the viewport along via bring-into-view.
             .verticalScroll(rememberScrollState())
+            // Return focus to the row a menu/confirm was opened from when it
+            // closes, instead of whichever row happens to be first on screen.
+            .focusRestorer()
+            .focusGroup()
             .padding(top = 56.dp, bottom = 32.dp, start = 48.dp, end = 48.dp)
     ) {
         Text(text = "Settings", modifier = Modifier.padding(bottom = 24.dp))

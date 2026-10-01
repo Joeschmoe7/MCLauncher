@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Text
 import com.wmc.mediacenter.apps.AppInfo
@@ -45,7 +46,10 @@ fun AllAppsScreen(
             contentPadding = PaddingValues(horizontal = 40.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp),
-            modifier = Modifier.fillMaxSize()
+            // Closing a context menu removes the focused option; without this,
+            // focus then fell to the first visible app instead of the one the
+            // menu was opened from.
+            modifier = Modifier.fillMaxSize().focusRestorer()
         ) {
             items(apps, key = { it.packageName }) { app ->
                 AppTile(

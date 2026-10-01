@@ -17,6 +17,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -24,6 +25,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import com.wmc.mediacenter.BuildConfig
 import com.wmc.mediacenter.HomeHandoff
@@ -36,8 +38,14 @@ import com.wmc.mediacenter.data.ShortcutConfig
 import com.wmc.mediacenter.screensaver.ScreensaverPhotoRepository
 import com.wmc.mediacenter.screensaver.ScreensaverSelection
 import com.wmc.mediacenter.ui.components.ContextMenuOverlay
+import com.wmc.mediacenter.ui.components.GlowIdleTimeoutMs
+import com.wmc.mediacenter.ui.components.LocalGlowPulseActive
 import com.wmc.mediacenter.ui.components.MessageDialog
 import com.wmc.mediacenter.ui.components.TextInputDialog
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.onStart
 
 /**
  * Top-level composable: owns which screen is showing, which (if any)
@@ -113,7 +121,30 @@ fun MCLauncherApp(viewModel: MainViewModel) {
         }
     }
 
-    Box(Modifier.fillMaxSize()) {
+    // Perf — the focus glow breathes only while the remote is in use; after
+    // GlowIdleTimeoutMs with no key press it settles and Home stops drawing
+    // frames entirely (see rememberGlowPulse). Any key wakes it. Key presses
+    // go through a flow, never composition state, so pressing keys doesn't
+    // recompose this whole tree — only the pulse effects observe the flip.
+    val glowPulseActive = remember { mutableStateOf(true) }
+    val keyPresses = remember { MutableSharedFlow<Unit>(extraBufferCapacity = 1) }
+    LaunchedEffect(keyPresses) {
+        keyPresses.onStart { emit(Unit) }.collectLatest {
+            glowPulseActive.value = true
+            delay(GlowIdleTimeoutMs)
+            glowPulseActive.value = false
+        }
+    }
+
+    CompositionLocalProvider(LocalGlowPulseActive provides glowPulseActive) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .onPreviewKeyEvent {
+                keyPresses.tryEmit(Unit)
+                false // observe only; never consume
+            }
+    ) {
         AnimatedContent(
             targetState = screen,
             transitionSpec = {
@@ -311,7 +342,13 @@ fun MCLauncherApp(viewModel: MainViewModel) {
                     options = listOf(
                         "Cancel" to { contextMenu = null },
                         "Delete" to {
-                            viewModel.deleteRow(menu.rowId)
+                            viewModel.deleteRow(menu.rowId) { hostRow ->
+                                Toast.makeText(
+                                    context,
+                                    "Setup cards (Edit Rows / Settings) moved to \"$hostRow\"",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
                             contextMenu = null
                         }
                     ),
@@ -507,6 +544,7 @@ fun MCLauncherApp(viewModel: MainViewModel) {
             }
         }
     }
+    } // CompositionLocalProvider (glow idle)
 }
 
 private fun rowTileMenuOptions(
@@ -529,11 +567,15 @@ private fun rowTileMenuOptions(
             dismiss()
         }
     }
-    options += "Remove from row" to {
-        // For a shortcut card this also deletes the underlying ShortcutConfig
-        // (see MainViewModel.removeFromRow) — there's no separate "delete" step.
-        viewModel.removeFromRow(menu.rowId, menu.app.packageName)
-        dismiss()
+    // The last Edit Rows / Settings card can't be removed — it's the only
+    // way back into setup (see SystemActions.ESSENTIAL).
+    if (!viewModel.isLastEssentialCard(menu.rowId, menu.app.packageName)) {
+        options += "Remove from row" to {
+            // For a shortcut card this also deletes the underlying ShortcutConfig
+            // (see MainViewModel.removeFromRow) — there's no separate "delete" step.
+            viewModel.removeFromRow(menu.rowId, menu.app.packageName)
+            dismiss()
+        }
     }
     // "App info"/"Uninstall" only make sense for real installed apps — a
     // built-in system-action card or shortcut card has no real package to

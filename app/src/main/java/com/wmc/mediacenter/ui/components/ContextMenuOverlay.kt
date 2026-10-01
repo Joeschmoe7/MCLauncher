@@ -8,9 +8,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -68,10 +71,28 @@ fun ContextMenuOverlay(
             .fillMaxSize()
             .background(Color.Black.copy(alpha = 0.6f))
             .onPreviewKeyEvent { event ->
+                // Back dismisses on the FIRST press. Left to the activity's
+                // BackHandler, Compose spent that press moving focus out of
+                // the scrolling option list instead, so the menu sat there
+                // with nothing highlighted until Back was pressed again.
+                if (event.key == Key.Back) {
+                    if (event.type == KeyEventType.KeyUp) onDismiss()
+                    return@onPreviewKeyEvent true
+                }
                 val isConfirmKey = event.key == Key.DirectionCenter ||
                     event.key == Key.Enter ||
                     event.key == Key.NumPadEnter
                 if (armed || !isConfirmKey) return@onPreviewKeyEvent false
+                // A FRESH press (repeatCount 0) can only come from a new
+                // button push, never from the long-press still being held, so
+                // it arms immediately and goes through. Without this, a menu
+                // opened by a SHORT click (Restore, Reset, Delete row, Launch
+                // on startup...) — whose key-up happened before the menu
+                // existed — swallowed the user's first real OK press.
+                if (event.type == KeyEventType.KeyDown && event.nativeKeyEvent.repeatCount == 0) {
+                    armed = true
+                    return@onPreviewKeyEvent false
+                }
                 if (event.type == KeyEventType.KeyUp) armed = true
                 true // swallow every confirm-key event until that first release
             }
@@ -85,6 +106,7 @@ fun ContextMenuOverlay(
         Column(
             modifier = Modifier
                 .width(360.dp)
+                .heightIn(max = 480.dp)
                 .clip(RoundedCornerShape(12.dp))
                 .background(WmcNavyMid)
                 // Absorb clicks so tapping inside the panel doesn't fall through
@@ -107,12 +129,24 @@ fun ContextMenuOverlay(
                     .padding(horizontal = 20.dp, vertical = 8.dp)
             )
 
-            options.forEachIndexed { index, (label, action) ->
-                MenuOptionRow(
-                    label = label,
-                    onClick = action,
-                    modifier = if (index == 0) Modifier.focusRequester(firstOptionFocusRequester) else Modifier
-                )
+            // Scrolls once the options outgrow the panel — the app pickers
+            // ("Launch on startup", "Shortcut opens which app?") list every
+            // installed app, and as a plain Column everything past the
+            // screen's height was squashed to nothing and unreachable. Focus
+            // moving down brings the next option into view by itself. The
+            // title stays put above it.
+            Column(
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                options.forEachIndexed { index, (label, action) ->
+                    MenuOptionRow(
+                        label = label,
+                        onClick = action,
+                        modifier = if (index == 0) Modifier.focusRequester(firstOptionFocusRequester) else Modifier
+                    )
+                }
             }
         }
     }

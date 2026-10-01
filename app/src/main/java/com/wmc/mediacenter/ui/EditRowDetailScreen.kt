@@ -26,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -76,7 +77,9 @@ fun EditRowDetailScreen(
 
         LazyRow(
             contentPadding = PaddingValues(horizontal = 48.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            // Return focus to the tile a context menu was opened from.
+            modifier = Modifier.focusRestorer()
         ) {
             itemsIndexed(apps, key = { _, app -> app.packageName }) { index, app ->
                 val shortcut = shortcutsById[app.packageName]

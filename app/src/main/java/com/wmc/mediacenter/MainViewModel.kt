@@ -5,6 +5,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.provider.Settings
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -25,6 +26,8 @@ import com.wmc.mediacenter.data.buildSeedConfig
 import com.wmc.mediacenter.screensaver.ScreensaverAvailability
 import com.wmc.mediacenter.screensaver.ScreensaverSelection
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -55,7 +58,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // S22 — lets the repository cap decoded artwork at the pixel size a
         // tile actually draws at on THIS panel, instead of a fixed 512px that
         // was ~2x oversampled at density 1.0.
-        displayDensity = application.resources.displayMetrics.density
+        displayDensity = application.resources.displayMetrics.density,
+        ownPackage = application.packageName
     )
     private val configRepository = LauncherConfigRepository(application)
     private val settingsRepository = SettingsRepository(application)
@@ -126,9 +130,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         // Saved an updated config; the new one flows back through
                         // configFlow and re-enters this collector.
                         return@collect
+                    } else if (withEssentialCards(config) != config) {
+                        // Self-heal (e.g. a restored backup or a pre-guard
+                        // config with no Settings card) — same re-entry as above.
+                        configRepository.update(::withEssentialCards)
+                        return@collect
                     } else {
+                        // Uninstalled apps are deliberately NOT pruned from
+                        // rows: buildUiState already skips them, and keeping
+                        // the entry means a reinstall (or apps installed after
+                        // a restore) comes back in its old slot.
                         _uiState.value = buildUiState(apps, config)
-                        pruneMissingPackages(apps, config)
                     }
                 }
         }
@@ -137,15 +149,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             settingsRepository.settingsFlow.collect { _settings.value = it }
         }
 
-        // F3 — fire at most once per process (i.e. once per boot / cold
-        // start). MediaCenter is the Home app so it's already foreground at
-        // this point; no RECEIVE_BOOT_COMPLETED receiver needed (and one
-        // would hit Android 10+ background-activity-start limits anyway).
+        // F3 — fire at most once per BOOT. Once per process isn't enough: this
+        // 2GB box kills our process during sleep and the S33 watchdog starts a
+        // fresh one on wake, which used to reopen the startup app every time
+        // the TV woke. The boot count is persisted, so a new process in the
+        // same boot sees it was already handled.
         viewModelScope.launch {
             if (startupHandled) return@launch
             startupHandled = true
+            // Claim the boot even with no startup app set, so choosing one
+            // later doesn't make it fire on the next restart in this same boot.
+            val bootCount = Settings.Global.getInt(application.contentResolver, Settings.Global.BOOT_COUNT, -1)
+            // -1: no boot count on this build — fall back to once per process.
+            val firstStartThisBoot = bootCount == -1 || settingsRepository.claimStartupLaunch(bootCount)
             val pkg = settingsRepository.settingsFlow.first().startupPackage
-            if (!pkg.isNullOrEmpty()) _startupLaunch.value = pkg
+            if (firstStartThisBoot && !pkg.isNullOrEmpty()) _startupLaunch.value = pkg
         }
 
         refreshApps()
@@ -239,56 +257,62 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Drops packages from saved rows once they're confirmed no longer
-     * installed, and persists the cleanup. A package missing from the
-     * latest discovery pass is only a *candidate* — [AppRepository.queryFor]
-     * swallows any exception into an empty list, so if just the LEANBACK
-     * query fails transiently (boot race, PM hiccup), a leanback-only app
-     * would otherwise look uninstalled and get silently, permanently
-     * pruned. Each candidate is re-checked directly via PackageManager
-     * (off the main thread) before it's actually dropped.
+     * Applies a user edit to the saved config as one atomic DataStore
+     * transaction (see [LauncherConfigRepository.update]) and, if anything
+     * changed, schedules an automatic backup.
      */
-    private fun pruneMissingPackages(apps: List<AppInfo>, config: LauncherConfig) {
-        if (apps.isEmpty()) return
-        val installed = apps.map { it.packageName }.toSet()
-        val candidates = config.rows.asSequence()
-            .flatMap { it.packages }
-            .filter { it !in installed && !SystemActions.isSystemAction(it) && !ShortcutConfig.isShortcutId(it) }
-            .distinct()
-            .toList()
-        if (candidates.isEmpty()) return
-
+    private fun editConfig(transform: (LauncherConfig) -> LauncherConfig) {
         viewModelScope.launch {
-            val confirmedGone = withContext(Dispatchers.IO) {
-                candidates.filterNot { appRepository.isInstalled(it) }.toSet()
-            }
-            if (confirmedGone.isEmpty()) return@launch
-            val current = configRepository.currentOrNull() ?: return@launch
-            val cleanedRows = current.rows.map { row ->
-                row.copy(packages = row.packages.filter { it !in confirmedGone })
-            }
-            if (cleanedRows != current.rows) {
-                configRepository.save(current.copy(rows = cleanedRows))
-            }
+            if (configRepository.update(transform)) scheduleAutoBackup()
         }
     }
 
-    /** Moves [packageName] within [rowId] by [offset] positions (e.g. -1 = left, +1 = right). */
-    fun moveWithinRow(rowId: String, packageName: String, offset: Int) {
+    /** Applies a user settings change, then schedules an automatic backup. */
+    private fun editSettings(block: suspend SettingsRepository.() -> Unit) {
         viewModelScope.launch {
-            val current = configRepository.currentOrNull() ?: return@launch
-            val updatedRows = current.rows.map { row ->
+            settingsRepository.block()
+            scheduleAutoBackup()
+        }
+    }
+
+    /**
+     * True if removing [packageName] from [rowId] would leave no copy of an
+     * essential card anywhere (see [SystemActions.ESSENTIAL]). The row-tile
+     * menu uses this to withhold "Remove from row".
+     */
+    fun isLastEssentialCard(rowId: String, packageName: String): Boolean {
+        if (packageName !in SystemActions.ESSENTIAL) return false
+        val rows = _uiState.value.rows
+        return rows.none { row -> row.id != rowId && row.apps.any { it.packageName == packageName } }
+    }
+
+    /**
+     * Moves [packageName] within [rowId] by one visible position in the
+     * direction of [offset]. Rows keep entries for uninstalled apps (they're
+     * hidden, not pruned), so a raw index step could land on an invisible
+     * entry and the move would look like it did nothing — step past those to
+     * the next tile actually on screen instead.
+     */
+    fun moveWithinRow(rowId: String, packageName: String, offset: Int) {
+        if (offset == 0) return
+        val installed = _apps.value.mapTo(HashSet()) { it.packageName }
+        editConfig { current ->
+            val shortcutIds = current.shortcuts.mapTo(HashSet()) { it.id }
+            fun isVisible(id: String) =
+                id in installed || SystemActions.isSystemAction(id) || id in shortcutIds
+            current.copy(rows = current.rows.map { row ->
                 if (row.id != rowId) return@map row
                 val index = row.packages.indexOf(packageName)
                 if (index == -1) return@map row
-                val newIndex = (index + offset).coerceIn(0, row.packages.lastIndex)
-                if (newIndex == index) return@map row
+                val step = if (offset < 0) -1 else 1
+                var target = index + step
+                while (target in row.packages.indices && !isVisible(row.packages[target])) target += step
+                if (target !in row.packages.indices) return@map row
                 val reordered = row.packages.toMutableList()
                 reordered.removeAt(index)
-                reordered.add(newIndex, packageName)
+                reordered.add(target, packageName)
                 row.copy(packages = reordered)
-            }
-            configRepository.save(current.copy(rows = updatedRows))
+            })
         }
     }
 
@@ -297,33 +321,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * deletes the underlying [ShortcutConfig] entirely (rather than just
      * unlinking it) — shortcuts only ever live in one row and there's no UI
      * to re-add an orphaned one, so leaving it around would just be cruft.
+     * Refuses to remove the last copy of an essential card.
      */
     fun removeFromRow(rowId: String, packageName: String) {
-        viewModelScope.launch {
-            val current = configRepository.currentOrNull() ?: return@launch
+        editConfig { current ->
             val updatedRows = current.rows.map { row ->
                 if (row.id == rowId) row.copy(packages = row.packages.filter { it != packageName }) else row
             }
-            val updatedShortcuts = if (ShortcutConfig.isShortcutId(packageName)) {
-                current.shortcuts.filter { it.id != packageName }
-            } else {
-                current.shortcuts
+            if (packageName in SystemActions.ESSENTIAL && updatedRows.none { packageName in it.packages }) {
+                return@editConfig current
             }
-            configRepository.save(current.copy(rows = updatedRows, shortcuts = updatedShortcuts))
+            current.copy(
+                rows = updatedRows,
+                shortcuts = current.shortcuts.filter { it.id != packageName }
+            )
         }
     }
 
     fun addToRow(rowId: String, packageName: String) {
-        viewModelScope.launch {
-            val current = configRepository.currentOrNull() ?: return@launch
-            val updatedRows = current.rows.map { row ->
+        editConfig { current ->
+            current.copy(rows = current.rows.map { row ->
                 if (row.id == rowId && packageName !in row.packages) {
                     row.copy(packages = row.packages + packageName)
                 } else {
                     row
                 }
-            }
-            configRepository.save(current.copy(rows = updatedRows))
+            })
         }
     }
 
@@ -331,122 +354,107 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun renameRow(rowId: String, newName: String) {
         val trimmed = newName.trim()
         if (trimmed.isEmpty()) return
-        viewModelScope.launch {
-            val current = configRepository.currentOrNull() ?: return@launch
-            val updated = current.rows.map { if (it.id == rowId) it.copy(name = trimmed) else it }
-            configRepository.save(current.copy(rows = updated))
+        editConfig { current ->
+            current.copy(rows = current.rows.map { if (it.id == rowId) it.copy(name = trimmed) else it })
         }
     }
 
     /** Reorders the row itself (not its apps) by [offset] positions — e.g. -1 = up, +1 = down. */
     fun moveRow(rowId: String, offset: Int) {
-        viewModelScope.launch {
-            val current = configRepository.currentOrNull() ?: return@launch
+        editConfig { current ->
             val index = current.rows.indexOfFirst { it.id == rowId }
-            if (index == -1) return@launch
+            if (index == -1) return@editConfig current
             val newIndex = (index + offset).coerceIn(0, current.rows.lastIndex)
-            if (newIndex == index) return@launch
             val reordered = current.rows.toMutableList()
-            val row = reordered.removeAt(index)
-            reordered.add(newIndex, row)
-            configRepository.save(current.copy(rows = reordered))
+            reordered.add(newIndex, reordered.removeAt(index))
+            current.copy(rows = reordered)
         }
     }
 
-    fun deleteRow(rowId: String) {
+    /**
+     * Deletes a row along with any shortcut cards it held. If it held the
+     * last Edit Rows / Settings card, those are moved to a "Settings" row
+     * (see [withEssentialCards]) and [onEssentialCardsMoved] gets that row's
+     * name so the UI can say where they went.
+     */
+    fun deleteRow(rowId: String, onEssentialCardsMoved: (String) -> Unit = {}) {
         viewModelScope.launch {
-            val current = configRepository.currentOrNull() ?: return@launch
-            configRepository.save(current.copy(rows = current.rows.filter { it.id != rowId }))
+            var movedTo: String? = null
+            val changed = configRepository.update { current ->
+                val deleted = current.rows.find { it.id == rowId } ?: return@update current
+                val remaining = current.copy(
+                    rows = current.rows.filter { it.id != rowId },
+                    shortcuts = current.shortcuts.filter { it.id !in deleted.packages }
+                )
+                val healed = withEssentialCards(remaining)
+                if (healed != remaining) {
+                    movedTo = healed.rows.first { row -> SystemActions.ESSENTIAL.any { it in row.packages } }.name
+                }
+                healed
+            }
+            if (changed) scheduleAutoBackup()
+            movedTo?.let(onEssentialCardsMoved)
         }
     }
 
     /** Adds a new, empty row named [name] (falls back to "New Row" if blank) at the end. */
     fun addRow(name: String) {
         val trimmed = name.trim().ifEmpty { "New Row" }
-        viewModelScope.launch {
-            val current = configRepository.currentOrNull() ?: return@launch
-            val newRow = RowConfig(id = UUID.randomUUID().toString(), name = trimmed, packages = emptyList())
-            configRepository.save(current.copy(rows = current.rows + newRow))
+        editConfig { current ->
+            current.copy(rows = current.rows + RowConfig(id = UUID.randomUUID().toString(), name = trimmed, packages = emptyList()))
         }
     }
 
-    fun setUse24HourClock(value: Boolean) {
-        viewModelScope.launch { settingsRepository.setUse24HourClock(value) }
-    }
+    fun setUse24HourClock(value: Boolean) = editSettings { setUse24HourClock(value) }
 
-    fun setShowAppNames(value: Boolean) {
-        viewModelScope.launch { settingsRepository.setShowAppNames(value) }
-    }
+    fun setShowAppNames(value: Boolean) = editSettings { setShowAppNames(value) }
 
     // --- F1: Hide apps ---------------------------------------------------
 
-    fun hideApp(packageName: String) {
-        viewModelScope.launch {
-            settingsRepository.setHiddenPackages(settings.value.hiddenPackages + packageName)
-        }
-    }
+    fun hideApp(packageName: String) = editSettings { updateHiddenPackages { it + packageName } }
 
-    fun unhideApp(packageName: String) {
-        viewModelScope.launch {
-            settingsRepository.setHiddenPackages(settings.value.hiddenPackages - packageName)
-        }
-    }
+    fun unhideApp(packageName: String) = editSettings { updateHiddenPackages { it - packageName } }
 
-    fun setShowHiddenApps(value: Boolean) {
-        viewModelScope.launch { settingsRepository.setShowHiddenApps(value) }
-    }
+    fun setShowHiddenApps(value: Boolean) = editSettings { setShowHiddenApps(value) }
 
     // --- T1: Non-TV (sideloaded) apps -------------------------------------
 
-    fun setShowNonTvApps(value: Boolean) {
-        viewModelScope.launch { settingsRepository.setShowNonTvApps(value) }
-    }
+    fun setShowNonTvApps(value: Boolean) = editSettings { setShowNonTvApps(value) }
 
     // --- F3: Launch on startup --------------------------------------------
 
-    fun setStartupPackage(packageName: String?) {
-        viewModelScope.launch { settingsRepository.setStartupPackage(packageName) }
-    }
+    fun setStartupPackage(packageName: String?) = editSettings { setStartupPackage(packageName) }
 
     // --- F4: Recent apps row ----------------------------------------------
 
-    fun setShowRecentRow(value: Boolean) {
-        viewModelScope.launch { settingsRepository.setShowRecentRow(value) }
-    }
+    fun setShowRecentRow(value: Boolean) = editSettings { setShowRecentRow(value) }
 
-    /** Records a real app launch (not a picker toggle / system-action click) into the Recent row's MRU list, capped at 12. */
+    /**
+     * Records a real app launch (not a picker toggle / system-action click)
+     * into the Recent row's MRU list, capped at 12. Not auto-backed-up: it
+     * changes on every launch and isn't worth an sdcard write each time.
+     */
     fun recordLaunch(packageName: String) {
         viewModelScope.launch {
-            val updated = (listOf(packageName) + settings.value.recentPackages).distinct().take(12)
-            settingsRepository.setRecentPackages(updated)
+            settingsRepository.updateRecentPackages { (listOf(packageName) + it).distinct().take(12) }
         }
     }
 
     fun removeRecent(packageName: String) {
         viewModelScope.launch {
-            settingsRepository.setRecentPackages(settings.value.recentPackages.filter { it != packageName })
+            settingsRepository.updateRecentPackages { recent -> recent.filter { it != packageName } }
         }
     }
 
-    fun setGlassTiles(value: Boolean) {
-        viewModelScope.launch { settingsRepository.setGlassTiles(value) }
-    }
+    fun setGlassTiles(value: Boolean) = editSettings { setGlassTiles(value) }
 
-    fun setClassicStrips(value: Boolean) {
-        viewModelScope.launch { settingsRepository.setClassicStrips(value) }
-    }
+    fun setClassicStrips(value: Boolean) = editSettings { setClassicStrips(value) }
 
-    fun setFadedTiles(value: Boolean) {
-        viewModelScope.launch { settingsRepository.setFadedTiles(value) }
-    }
+    fun setFadedTiles(value: Boolean) = editSettings { setFadedTiles(value) }
 
-    fun setPreferIconTiles(value: Boolean) {
-        viewModelScope.launch { settingsRepository.setPreferIconTiles(value) }
-    }
+    fun setPreferIconTiles(value: Boolean) = editSettings { setPreferIconTiles(value) }
 
-    fun setScreensaverFolderPath(value: String?) {
-        viewModelScope.launch { settingsRepository.setScreensaverFolderPath(value) }
-    }
+    fun setScreensaverFolderPath(value: String?) = editSettings { setScreensaverFolderPath(value) }
 
     /**
      * S36 — persists the preference AND applies it to the DreamService
@@ -461,6 +469,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setScreensaverEnabled(value: Boolean, onEnabled: (autoSelected: Boolean) -> Unit = {}) {
         viewModelScope.launch {
             val autoSelected = applyScreensaverEnabled(value, persist = true)
+            scheduleAutoBackup()
             if (value) onEnabled(autoSelected)
         }
     }
@@ -541,21 +550,60 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val trimmedLabel = label.trim().ifEmpty { "Shortcut" }
         val trimmedUri = uri?.trim()?.takeIf { it.isNotEmpty() }
         if (trimmedUri == null && stringExtras.isEmpty() && booleanExtras.isEmpty()) return
-        viewModelScope.launch {
-            val current = configRepository.currentOrNull() ?: return@launch
-            val shortcut = ShortcutConfig(
-                id = ShortcutConfig.newId(),
-                label = trimmedLabel,
-                targetPackage = targetPackage,
-                uri = trimmedUri,
-                stringExtras = stringExtras,
-                booleanExtras = booleanExtras
+        val shortcut = ShortcutConfig(
+            id = ShortcutConfig.newId(),
+            label = trimmedLabel,
+            targetPackage = targetPackage,
+            uri = trimmedUri,
+            stringExtras = stringExtras,
+            booleanExtras = booleanExtras
+        )
+        editConfig { current ->
+            if (current.rows.none { it.id == rowId }) return@editConfig current
+            current.copy(
+                rows = current.rows.map { row ->
+                    if (row.id == rowId) row.copy(packages = row.packages + shortcut.id) else row
+                },
+                shortcuts = current.shortcuts + shortcut
             )
-            val updatedRows = current.rows.map { row ->
-                if (row.id == rowId) row.copy(packages = row.packages + shortcut.id) else row
-            }
-            configRepository.save(current.copy(rows = updatedRows, shortcuts = current.shortcuts + shortcut))
         }
+    }
+
+    // --- Auto-backup --------------------------------------------------------
+
+    private var autoBackupJob: Job? = null
+
+    /**
+     * Writes the backup file [AUTO_BACKUP_DELAY_MS] after the last user edit,
+     * so a burst of edits (reordering a row, flipping several settings) costs
+     * one write. Silent: a missing storage grant just means no backup, same
+     * as before this existed — the manual "Back up" row still reports it.
+     *
+     * Only user edits call this — never seeding, the essential-card heal, a
+     * restore or a reset. That matters: a fresh install seeds a default
+     * config on first start, and backing THAT up would overwrite the user's
+     * real backup before they had a chance to restore it.
+     */
+    private fun scheduleAutoBackup() {
+        autoBackupJob?.cancel()
+        autoBackupJob = viewModelScope.launch {
+            delay(AUTO_BACKUP_DELAY_MS)
+            val backup = buildBackup() ?: return@launch
+            withContext(Dispatchers.IO) {
+                if (backupRepository.storageReady()) backupRepository.export(backup)
+            }
+        }
+    }
+
+    private suspend fun buildBackup(): LauncherBackup? {
+        val config = configRepository.currentOrNull() ?: return null
+        return LauncherBackup(
+            schemaVersion = BackupRepository.SCHEMA_VERSION,
+            appVersion = BuildConfig.VERSION_NAME,
+            exportedAt = BackupRepository.timestamp(),
+            config = config,
+            settings = SettingsBackup.from(settingsRepository.settingsFlow.first())
+        )
     }
 
     // --- T2: Backup & restore ----------------------------------------------
@@ -567,18 +615,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun exportBackup(onResult: (String) -> Unit) {
         viewModelScope.launch {
-            val config = configRepository.currentOrNull()
-            if (config == null) {
+            val backup = buildBackup()
+            if (backup == null) {
                 onResult("Nothing to back up yet")
                 return@launch
             }
-            val backup = LauncherBackup(
-                schemaVersion = BackupRepository.SCHEMA_VERSION,
-                appVersion = BuildConfig.VERSION_NAME,
-                exportedAt = BackupRepository.timestamp(),
-                config = config,
-                settings = SettingsBackup.from(settings.value)
-            )
             val result = withContext(Dispatchers.IO) { backupRepository.export(backup) }
             onResult(
                 when (result) {
@@ -633,6 +674,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val seed = buildSeedConfig(discovered.map { it.packageName }.toSet())
             configRepository.save(seed)
         }
+    }
+
+    /**
+     * [config] with every [SystemActions.ESSENTIAL] card present somewhere.
+     * Missing ones are appended to the first row that already holds a system
+     * card (normally "Settings"), or to a new "Settings" row if none does.
+     */
+    private fun withEssentialCards(config: LauncherConfig): LauncherConfig {
+        val missing = SystemActions.ESSENTIAL.filter { card -> config.rows.none { card in it.packages } }
+        if (missing.isEmpty()) return config
+        val hostIndex = config.rows.indexOfFirst { row -> row.packages.any(SystemActions::isSystemAction) }
+        return if (hostIndex == -1) {
+            config.copy(rows = config.rows + RowConfig(id = UUID.randomUUID().toString(), name = "Settings", packages = missing))
+        } else {
+            config.copy(rows = config.rows.mapIndexed { i, row ->
+                if (i == hostIndex) row.copy(packages = row.packages + missing) else row
+            })
+        }
+    }
+
+    private companion object {
+        const val AUTO_BACKUP_DELAY_MS = 5_000L
     }
 
     override fun onCleared() {

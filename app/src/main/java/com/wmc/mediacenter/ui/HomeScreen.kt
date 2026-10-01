@@ -32,12 +32,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.layout
@@ -54,12 +56,13 @@ import com.wmc.mediacenter.apps.SystemActions
 import com.wmc.mediacenter.data.AppSettings
 import com.wmc.mediacenter.data.ShortcutConfig
 import com.wmc.mediacenter.ui.components.AppTile
+import com.wmc.mediacenter.ui.components.HomeHeader
 import com.wmc.mediacenter.ui.components.TileHeight
 import com.wmc.mediacenter.ui.components.TileWidth
 import com.wmc.mediacenter.ui.components.WmcHighlightFrame
-import com.wmc.mediacenter.ui.components.HomeHeader
 import com.wmc.mediacenter.ui.theme.WmcTextPrimary
 import kotlin.math.roundToInt
+import kotlinx.coroutines.flow.first
 
 /**
  * S11 — ONE motion profile for everything that moves vertically on Home: the
@@ -249,7 +252,11 @@ fun HomeScreen(
             if (recentApps.isNotEmpty()) {
                 add(HomeRowItem(key = "__recent__", rowId = null, title = "Recent", apps = recentApps, isRecent = true))
             }
-            uiState.rows.forEach { row ->
+            // Empty rows (a fresh "Apps", or one whose apps were all
+            // uninstalled) are left off Home entirely: they draw nothing, and
+            // an empty row 0 held the initial-focus requester with no tile to
+            // give it to, so the remote did nothing until a second press.
+            uiState.rows.filter { it.apps.isNotEmpty() }.forEach { row ->
                 add(HomeRowItem(key = row.id, rowId = row.id, title = row.name, apps = row.apps, isRecent = false))
             }
         }
@@ -288,6 +295,11 @@ fun HomeScreen(
             CompositionLocalProvider(LocalBringIntoViewSpec provides NoFocusScrollSpec) {
             LazyColumn(
                 state = listState,
+                // With the LazyRow's own restorer below: when a context menu
+                // closes, focus returns to the exact tile it was opened from.
+                // Without these it fell to the first visible tile, and the next
+                // key press acted on the wrong card.
+                modifier = Modifier.focusRestorer(),
                 // Half-viewport top/bottom padding so ANY row — first or last,
                 // expanded or collapsed — can always reach the vertical
                 // center when focused. (0.35f was enough when every row was
@@ -381,6 +393,19 @@ fun HomeScreen(
                     val error = top - anchorY   // >0: row sits below the anchor
                     if (kotlin.math.abs(error) < 0.5f && kotlin.math.abs(velocity) < 2f) {
                         velocity = 0f
+                        // Settled: stop requesting a frame every vsync and
+                        // sleep until focus moves to another row or the
+                        // focused row's position changes (rows above it
+                        // collapsing/expanding, rows added or removed). Both
+                        // are snapshot state, so this resumes on the very
+                        // frame they change. Without it the loop kept the
+                        // Choreographer awake at 60 Hz forever.
+                        val settled = focusedRowIndex to item.offset
+                        snapshotFlow {
+                            focusedRowIndex to listState.layoutInfo.visibleItemsInfo
+                                .find { it.index == focusedRowIndex }?.offset
+                        }.first { it != settled }
+                        lastFrame = 0L
                         continue
                     }
 
@@ -570,6 +595,7 @@ private fun AppRow(
                 },
                 horizontalArrangement = Arrangement.spacedBy(RowTileSpacing),
                 modifier = Modifier
+                    .focusRestorer()
                     .graphicsLayer {
                         // S15 — tile opacity is GATED, not linear in expansion.
                         // Height animates over the full 0..1, but tiles stay

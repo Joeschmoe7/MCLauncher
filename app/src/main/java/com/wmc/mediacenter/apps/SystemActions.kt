@@ -26,6 +26,14 @@ object SystemActions {
     /** Default set + order for the seeded "Settings" row. */
     val DEFAULT_SETTINGS_ROW: List<String> = listOf(ALL_APPS, EDIT_ROWS, SETTINGS, GOOGLE_TV_HOME)
 
+    /**
+     * Cards that must always exist in some row. They're the only way into
+     * Edit Rows and Settings, and once removed there's no UI to add a system
+     * card back — so losing the last copy locked the user out of their own
+     * setup until app data was cleared. See MainViewModel.withEssentialCards.
+     */
+    val ESSENTIAL: List<String> = listOf(EDIT_ROWS, SETTINGS)
+
     private val LABELS: Map<String, String> = linkedMapOf(
         ALL_APPS to "All Apps",
         EDIT_ROWS to "Edit Rows",

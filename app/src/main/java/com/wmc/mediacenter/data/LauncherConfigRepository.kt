@@ -53,4 +53,27 @@ class LauncherConfigRepository(private val context: Context) {
             prefs[CONFIG_KEY] = raw
         }
     }
+
+    /**
+     * Read-modify-write as ONE DataStore transaction. DataStore serializes
+     * `edit` blocks, so two quick edits (e.g. Move left pressed twice) each
+     * see the other's result — a separate [currentOrNull] + [save] let both
+     * read the same starting config and the second silently undid the first.
+     * No-op when nothing is saved yet or [transform] returns the same config.
+     * Returns true if a new config was written.
+     */
+    suspend fun update(transform: (LauncherConfig) -> LauncherConfig): Boolean {
+        var changed = false
+        context.launcherDataStore.edit { prefs ->
+            val current = prefs[CONFIG_KEY]
+                ?.let { raw -> runCatching { json.decodeFromString(LauncherConfig.serializer(), raw) }.getOrNull() }
+                ?: return@edit
+            val updated = transform(current)
+            if (updated != current) {
+                prefs[CONFIG_KEY] = json.encodeToString(LauncherConfig.serializer(), updated)
+                changed = true
+            }
+        }
+        return changed
+    }
 }

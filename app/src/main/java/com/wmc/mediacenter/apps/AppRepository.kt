@@ -46,7 +46,9 @@ fun PackageManager.launchIntentFor(packageName: String): Intent? =
  */
 class AppRepository(
     private val packageManager: PackageManager,
-    displayDensity: Float = 1f
+    displayDensity: Float = 1f,
+    /** MCLauncher's own package — left out of discovery. Launching the launcher from itself does nothing useful, and it cluttered every app list and picker. */
+    private val ownPackage: String? = null
 ) {
 
     // Tiles draw at 220x130dp and scale to 1.12x on focus, so ~246x146dp is
@@ -79,25 +81,11 @@ class AppRepository(
         queryFor(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER))
             .forEach { byPackage.putIfAbsent(it.activityInfo.packageName, it) }
 
+        ownPackage?.let { byPackage.remove(it) }
+
         return byPackage.values
             .mapNotNull { toAppInfoOrNull(it, isTvApp = it.activityInfo.packageName in tvPackages) }
             .sortedBy { it.label.lowercase() }
-    }
-
-    /**
-     * Confirms whether [packageName] is actually still installed — used to
-     * gate row pruning so a transient discovery failure (e.g. the LEANBACK
-     * query failing on a boot race) can never be mistaken for an uninstall.
-     * An unknown failure is treated as "still installed" (never prune on
-     * doubt); only a definitive NameNotFoundException means it's gone.
-     */
-    fun isInstalled(packageName: String): Boolean = try {
-        packageManager.getPackageInfo(packageName, 0)
-        true
-    } catch (e: PackageManager.NameNotFoundException) {
-        false
-    } catch (e: Exception) {
-        true
     }
 
     /** Drops any cached artwork for [packageName], e.g. after ACTION_PACKAGE_REPLACED, so the next discovery pass re-reads fresh icon/banner instead of showing stale artwork indefinitely. Must also drop the baked faded copies, or an updated app keeps its old silhouette. */

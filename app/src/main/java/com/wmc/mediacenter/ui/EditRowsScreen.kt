@@ -19,6 +19,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -48,7 +49,8 @@ fun EditRowsScreen(
     ) {
         Text(text = "Edit Rows", modifier = Modifier.padding(bottom = 20.dp))
 
-        LazyColumn(modifier = Modifier.fillMaxWidth()) {
+        // focusRestorer: return focus to the row a context menu was opened from.
+        LazyColumn(modifier = Modifier.fillMaxWidth().focusRestorer()) {
             items(rows, key = { it.id }) { row ->
                 EditRowsEntry(
                     label = "${row.name}  ·  ${row.apps.size} app${if (row.apps.size == 1) "" else "s"}",

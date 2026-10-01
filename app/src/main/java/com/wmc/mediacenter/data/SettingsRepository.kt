@@ -3,6 +3,7 @@ package com.wmc.mediacenter.data
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
@@ -27,6 +28,10 @@ private val PREFER_ICON_TILES_KEY = booleanPreferencesKey("prefer_icon_tiles")
 private val SCREENSAVER_FOLDER_PATH_KEY = stringPreferencesKey("screensaver_folder_path")
 private val SCREENSAVER_ENABLED_KEY = booleanPreferencesKey("screensaver_enabled")
 private val SCREENSAVER_PREVIOUS_DREAM_KEY = stringPreferencesKey("screensaver_previous_dream")
+
+// Device-local bookkeeping, not a setting: Settings.Global.BOOT_COUNT of the
+// boot whose "Launch on startup" has already fired. Never backed up.
+private val STARTUP_LAUNCH_BOOT_KEY = intPreferencesKey("startup_launch_boot")
 
 // One-time flag: whether the default "Settings" row has been added to configs
 // that predate it. Guards the migration in MainViewModel so it runs at most
@@ -77,8 +82,11 @@ class SettingsRepository(private val context: Context) {
         context.launcherDataStore.edit { prefs -> prefs[SHOW_APP_NAMES_KEY] = value }
     }
 
-    suspend fun setHiddenPackages(value: Set<String>) {
-        context.launcherDataStore.edit { prefs -> prefs[HIDDEN_PACKAGES_KEY] = value }
+    /** Read-modify-write in one DataStore edit, so two quick hides can't overwrite each other. */
+    suspend fun updateHiddenPackages(transform: (Set<String>) -> Set<String>) {
+        context.launcherDataStore.edit { prefs ->
+            prefs[HIDDEN_PACKAGES_KEY] = transform(prefs[HIDDEN_PACKAGES_KEY] ?: emptySet())
+        }
     }
 
     suspend fun setShowHiddenApps(value: Boolean) {
@@ -100,8 +108,28 @@ class SettingsRepository(private val context: Context) {
         context.launcherDataStore.edit { prefs -> prefs[SHOW_RECENT_ROW_KEY] = value }
     }
 
-    suspend fun setRecentPackages(value: List<String>) {
-        context.launcherDataStore.edit { prefs -> prefs[RECENT_PACKAGES_KEY] = value.joinToString("\n") }
+    /** Read-modify-write in one DataStore edit, same reason as [updateHiddenPackages]. */
+    suspend fun updateRecentPackages(transform: (List<String>) -> List<String>) {
+        context.launcherDataStore.edit { prefs ->
+            val current = prefs[RECENT_PACKAGES_KEY]?.split("\n")?.filter { it.isNotBlank() } ?: emptyList()
+            prefs[RECENT_PACKAGES_KEY] = transform(current).joinToString("\n")
+        }
+    }
+
+    /**
+     * Claims [bootCount] for "Launch on startup". Returns true only the first
+     * time it's called for a given boot, atomically — so a process restarted
+     * by the S33 watchdog after a sleep-kill can't fire the startup app again.
+     */
+    suspend fun claimStartupLaunch(bootCount: Int): Boolean {
+        var claimed = false
+        context.launcherDataStore.edit { prefs ->
+            if (prefs[STARTUP_LAUNCH_BOOT_KEY] != bootCount) {
+                prefs[STARTUP_LAUNCH_BOOT_KEY] = bootCount
+                claimed = true
+            }
+        }
+        return claimed
     }
 
     suspend fun setGlassTiles(value: Boolean) {

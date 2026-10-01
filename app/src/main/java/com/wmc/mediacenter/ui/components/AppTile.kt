@@ -1,12 +1,9 @@
 package com.wmc.mediacenter.ui.components
 
 import android.content.Context
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
@@ -25,10 +22,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -58,6 +58,7 @@ import com.wmc.mediacenter.apps.launchIntentFor
 import com.wmc.mediacenter.ui.theme.WmcAccentCyan
 import com.wmc.mediacenter.ui.theme.WmcTextPrimary
 import kotlin.math.max
+import kotlinx.coroutines.flow.collectLatest
 
 // S24 — INTERNAL, not private: HomeScreen derives the strip's cursor-slot
 // position (RowCursorSlotStart) from this width. Duplicating the number there
@@ -203,12 +204,7 @@ fun AppTile(
     // while focused. Kept as a State and only read in the DRAW phase below
     // (S10) — reading it in composition recomposed the tile at 60fps.
     val glowPulse: State<Float> = if (isFocused) {
-        rememberInfiniteTransition(label = "focusPulse").animateFloat(
-            initialValue = 0f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(tween(durationMillis = 1500), repeatMode = RepeatMode.Reverse),
-            label = "focusPulseValue"
-        )
+        rememberGlowPulse()
     } else {
         remember { mutableStateOf(1f) }
     }
@@ -432,12 +428,7 @@ fun AppTile(
  */
 @Composable
 fun WmcHighlightFrame(modifier: Modifier = Modifier) {
-    val glowPulse = rememberInfiniteTransition(label = "highlightPulse").animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(durationMillis = 1500), repeatMode = RepeatMode.Reverse),
-        label = "highlightPulseValue"
-    )
+    val glowPulse = rememberGlowPulse()
     Box(
         modifier = modifier
             .width(TileWidth)
@@ -586,4 +577,42 @@ private fun systemActionIconRes(packageName: String): Int? = when (packageName) 
     SystemActions.SETTINGS -> R.drawable.ic_sys_settings
     SystemActions.GOOGLE_TV_HOME -> R.drawable.ic_sys_google_tv_home
     else -> null
+}
+
+/**
+ * Whether the focus glow should be breathing right now. MCLauncherApp flips
+ * it off after [GlowIdleTimeoutMs] without a key press and back on at the
+ * next one. A State (not a plain Boolean) so the flip is observed inside
+ * [rememberGlowPulse]'s effect rather than recomposing every tile.
+ */
+val LocalGlowPulseActive = staticCompositionLocalOf<State<Boolean>> { mutableStateOf(true) }
+
+const val GlowIdleTimeoutMs = 20_000L
+
+/**
+ * WMC's breathing focus glow: 0→1→0 every 3s while [LocalGlowPulseActive] is
+ * on; when it goes off, eases to 1 (the same full brightness an unfocused
+ * tile's frame rests at) and STOPS.
+ *
+ * Measured on the box: an infinite pulse kept Home redrawing ~63 fps and
+ * using ~35% of a CPU core while nothing on screen was moving, for as long as
+ * the TV sat on Home. Settling it lets the app go fully idle.
+ */
+@Composable
+fun rememberGlowPulse(): State<Float> {
+    val active = LocalGlowPulseActive.current
+    val pulse = remember { Animatable(0f) }
+    LaunchedEffect(pulse, active) {
+        snapshotFlow { active.value }.collectLatest { on ->
+            if (on) {
+                while (true) {
+                    pulse.animateTo(1f, tween(durationMillis = 1500))
+                    pulse.animateTo(0f, tween(durationMillis = 1500))
+                }
+            } else {
+                pulse.animateTo(1f, tween(durationMillis = 600))
+            }
+        }
+    }
+    return pulse.asState()
 }
