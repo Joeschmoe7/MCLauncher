@@ -1,6 +1,7 @@
 package com.wmc.mediacenter.ui
 
 import com.wmc.mediacenter.apps.AppInfo
+import com.wmc.mediacenter.data.ShortcutConfig
 
 sealed interface Screen {
     data object Home : Screen
@@ -63,14 +64,32 @@ sealed interface DialogState {
     data class RenameRow(val rowId: String, val currentName: String) : DialogState
     data object AddRow : DialogState
 
+    // The three shortcut steps below serve both "+ Add shortcut" and a shortcut
+    // card's "Edit shortcut". [editing] is the card being edited (null when
+    // adding): it pre-fills each field and the last step saves over it.
+
     /** "+ Add shortcut" step 2: name the card (e.g. "Movies"). */
-    data class EnterShortcutLabel(val rowId: String, val targetPackage: String) : DialogState
+    data class EnterShortcutLabel(
+        val rowId: String,
+        val targetPackage: String,
+        val editing: ShortcutConfig? = null
+    ) : DialogState
 
     /** "+ Add shortcut" step 3: the deep-link URI to fire at the target app (e.g. channels://navigate/Movies). Left blank for apps like Jellyfin that use an item ID instead — see [EnterShortcutItemId]. */
-    data class EnterShortcutUri(val rowId: String, val targetPackage: String, val label: String) : DialogState
+    data class EnterShortcutUri(
+        val rowId: String,
+        val targetPackage: String,
+        val label: String,
+        val editing: ShortcutConfig? = null
+    ) : DialogState
 
     /** "+ Add shortcut" step 3b: only shown when step 3's URI was left blank — a library/item ID sent as Jellyfin-style `ItemId` + `ItemIsUserView` extras instead of a URI. */
-    data class EnterShortcutItemId(val rowId: String, val targetPackage: String, val label: String) : DialogState
+    data class EnterShortcutItemId(
+        val rowId: String,
+        val targetPackage: String,
+        val label: String,
+        val editing: ShortcutConfig? = null
+    ) : DialogState
 
     /**
      * S36 — shown right after the user switches the photo wall screensaver ON.

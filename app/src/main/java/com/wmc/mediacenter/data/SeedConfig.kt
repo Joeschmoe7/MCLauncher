@@ -16,7 +16,7 @@ private val TV_ROW_CANDIDATES: List<List<String>> = listOf(
 
 private val MOVIES_ROW_CANDIDATES: List<List<String>> = listOf(
     listOf("com.plexapp.android"),               // Plex
-    listOf("com.amazon.avod.thirdpartyclient"),  // Prime Video
+    listOf("com.amazon.amazonvideo.livingroom", "com.amazon.avod.thirdpartyclient"), // Prime Video (TV, then mobile)
     listOf("com.disney.disneyplus")              // Disney+
 )
 

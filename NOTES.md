@@ -121,6 +121,7 @@ MainActivity ──> MCLauncherApp (in-memory screen switch, context menus, conf
                       
 MainViewModel ─ the ONLY place state changes. UI composables are stateless.
    ├── AppRepository          discovery + artwork decode + faded bake (Dispatchers.IO)
+   │     └── CustomArtwork    user art from /sdcard/MCLauncher/Artwork, decoded during discovery
    ├── LauncherConfigRepository   rows, JSON in DataStore
    ├── SettingsRepository         prefs in DataStore
    └── BackupRepository       T2 — rows+settings ⇄ /sdcard/MCLauncher/mclauncher-backup.json
@@ -373,6 +374,12 @@ Ranked. Nothing here is required — the launcher is a working daily driver.
 - `SettingsScreen` is a `verticalScroll` — it outgrew the viewport. Newer options are
   unreachable without it.
 - Returning Home from another screen re-runs initial focus to the first tile.
+- **Not done, on purpose:** Channels "preset" shortcuts — the app's manifest only declares
+  `channels://com.getchannels.dvr.app/app` and `/play`; section links like `navigate/Movies`
+  are parsed inside the app and can't be enumerated, so presets would be guesses. A Jellyfin
+  library picker would need network access, which this app deliberately doesn't have.
+  Jump-by-letter in long lists: the remote has no letter keys, menus now scroll, and All Apps
+  is a handful of rows.
 - `AppRepository.render()`'s intrinsic-size decode was written to fix the YouTube banner and
   did **not** — the cause was §5.1. It is kept because it is still correct for gravity-bearing
   wrapper drawables and costs nothing.
@@ -440,6 +447,22 @@ says.**
   config missing one is healed on load — they are the only way back into setup.
 - **Auto-backup only follows user edits**, never seeding/heal/restore/reset — backing up a
   fresh install's seed config would overwrite the real backup before it could be restored.
+- **Custom artwork is decoded only during discovery, on IO** (`CustomArtwork.rescan`, called
+  from `loadInstalledApps`). Lookups (`forName`) are a map read, so `buildUiState` can give
+  shortcut cards their art from the main thread. `MainActivity.onResume` compares a cheap
+  folder fingerprint and re-runs discovery only when it changed — never decode on resume.
+- **Settings cards open with `NEW_TASK | CLEAR_TASK`.** TV Settings keeps a single task; without
+  CLEAR_TASK the page lands on top of whatever Settings screen was left open, and Back walks
+  into that instead of returning here. Each card has a fallback list ending in
+  `ACTION_SETTINGS` (`SystemActions.settingsIntentsFor`); on the onn, `DISPLAY_SETTINGS` and
+  `BLUETOOTH_SETTINGS` resolve to nothing, `SOUND_SETTINGS` hits a chooser unless pinned to
+  `com.android.tv.settings`, and "Remotes & Accessories" has no activity of its own (it's a
+  slice) — `CONNECT_INPUT` (pair accessory) is the closest.
+- **"Home pressed while visible" is `onNewIntent` with no `onStop` since the last `onResume`.**
+  Android always pauses before delivering a new intent, so checking for RESUMED never fires.
+  Returning from another app (or the watchdog bounce) goes through `onStop`, so it keeps the
+  user's place; only a Home press on Home resets to the top (`key(homeResetCount)` rebuilds
+  HomeScreen, which re-runs initial focus with every row scrolled to its start).
 - **DataStore flows have `.catch`** guards — without them a corrupt prefs file kills the
   collector and settings silently stop updating for the process lifetime.
 - **ProGuard rules for kotlinx.serialization** are required and now present. They were a P1

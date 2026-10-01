@@ -1,5 +1,6 @@
 package com.wmc.mediacenter.ui
 
+import android.content.Context
 import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
@@ -333,6 +334,7 @@ fun HomeScreen(
                         onSystemAction = { packageName ->
                             if (!item.isRecent) {
                                 dispatchSystemAction(
+                                    context = context,
                                     packageName = packageName,
                                     onOpenAllApps = onOpenAllApps,
                                     onOpenEditRows = onOpenEditRows,
@@ -728,6 +730,7 @@ private fun RowChevron(symbol: String, modifier: Modifier = Modifier) {
  * Reset Setup.
  */
 private fun dispatchSystemAction(
+    context: Context,
     packageName: String,
     onOpenAllApps: () -> Unit,
     onOpenEditRows: () -> Unit,
@@ -739,5 +742,6 @@ private fun dispatchSystemAction(
         SystemActions.EDIT_ROWS -> onOpenEditRows()
         SystemActions.SETTINGS -> onOpenSettings()
         SystemActions.GOOGLE_TV_HOME -> onGoogleTvHome()
+        else -> openAndroidSettings(context, packageName)
     }
 }

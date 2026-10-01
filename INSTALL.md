@@ -67,7 +67,7 @@ reverses all of it.
 |---|---|
 | `set-home-activity` | The **Home button** opens MCLauncher instead of Google TV |
 | `appops … SYSTEM_ALERT_WINDOW` | MCLauncher **appears on its own after a power cycle** |
-| `appops … MANAGE_EXTERNAL_STORAGE` | **Backup & restore** in Settings can read/write its backup file (optional) |
+| `appops … MANAGE_EXTERNAL_STORAGE` | **Backup & restore** can read/write its backup file, and **custom artwork** can be read (optional) |
 
 You can do the first without the second. You'll just have to press Home once
 after unplugging and replugging the TV.
@@ -150,16 +150,20 @@ event and means nothing here.
 
 ### 6b. Optional third command — backup & restore
 
-Settings has **Back up rows & settings** / **Restore from backup**, which
-keep a copy of your setup at `/sdcard/MCLauncher/mclauncher-backup.json` so
-it survives an uninstall (updates that change the signing key require one).
-Writing to that shared location needs one more grant:
+MCLauncher keeps a copy of your setup at
+`/sdcard/MCLauncher/mclauncher-backup.json` — written automatically a few
+seconds after every change, and on demand from **Back up rows & settings** —
+so it survives an uninstall (updates that change the signing key require
+one). **Restore from backup** in Settings reads it back. The same folder holds
+**custom tile artwork** (`/sdcard/MCLauncher/Artwork/`, see the README).
+Using that shared location needs one more grant:
 
 ```
 adb -s DEVICE_IP:5555 shell appops set com.wmc.mediacenter MANAGE_EXTERNAL_STORAGE allow
 ```
 
-Without it, both buttons show a message with this command instead of working.
+Without it, both buttons show a message with this command instead of working,
+no automatic backups are written, and custom artwork is ignored.
 Like the others, it survives reboots but not uninstalls — after reinstalling,
 re-run it **before** using Restore.
 

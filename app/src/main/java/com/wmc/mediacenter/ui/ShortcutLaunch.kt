@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import com.wmc.mediacenter.apps.SystemActions
 import com.wmc.mediacenter.data.ShortcutConfig
 
 /**
@@ -45,4 +46,30 @@ fun launchShortcut(context: Context, shortcut: ShortcutConfig) {
     } catch (e: Exception) {
         Toast.makeText(context, "Couldn't open \"${shortcut.label}\"", Toast.LENGTH_SHORT).show()
     }
+}
+
+/**
+ * Opens the Android TV Settings page behind a built-in settings card (TV
+ * Settings, Network, Display & Sound, Pair Accessory), trying each candidate
+ * from [SystemActions.settingsIntentsFor] until one starts — different boxes
+ * expose different pages. Toasts only if none of them, including the main
+ * Settings screen, can be opened.
+ */
+fun openAndroidSettings(context: Context, cardId: String) {
+    for (intent in SystemActions.settingsIntentsFor(cardId)) {
+        try {
+            // CLEAR_TASK: TV Settings keeps one task. Without it the page
+            // opened on top of whatever Settings screen was left open earlier,
+            // and Back walked into that instead of returning to MCLauncher.
+            context.startActivity(
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            )
+            return
+        } catch (e: ActivityNotFoundException) {
+            // try the next, less specific page
+        } catch (e: SecurityException) {
+            // not exported to us on this build — try the next one
+        }
+    }
+    Toast.makeText(context, "Couldn't open ${SystemActions.labelFor(cardId) ?: "Settings"}", Toast.LENGTH_SHORT).show()
 }

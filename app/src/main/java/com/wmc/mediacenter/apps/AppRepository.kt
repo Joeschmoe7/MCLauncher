@@ -60,6 +60,9 @@ class AppRepository(
     private val maxArtWidth = (246f * displayDensity).toInt().coerceIn(220, 512)
     private val maxArtHeight = (146f * displayDensity).toInt().coerceIn(130, 320)
 
+    /** User artwork overrides from /sdcard/MCLauncher/Artwork — see [CustomArtwork]. */
+    val customArtwork = CustomArtwork(maxArtWidth, maxArtHeight)
+
     // Bounded by BYTES, not entry count. The old LruCache(128) counted
     // entries, so with large artwork it could hold ~80MB on a 2GB box — and
     // S22 doubles the entries by caching a faded copy per source. sizeOf
@@ -70,6 +73,8 @@ class AppRepository(
     }
 
     fun loadInstalledApps(): List<AppInfo> {
+        customArtwork.rescan(::fadeBitmap)
+
         val byPackage = LinkedHashMap<String, ResolveInfo>()
 
         // Leanback first, so an app declaring both categories keeps its TV
@@ -119,17 +124,32 @@ class AppRepository(
         return try {
             val iconKey = "icon:$packageName"
             val bannerKey = "banner:$packageName"
-            val icon = loadArtwork(iconKey) { resolveInfo.loadIcon(packageManager) }
-            val banner = loadArtwork(bannerKey) { loadBanner(resolveInfo) }
-            AppInfo(
-                packageName = packageName,
-                label = resolveInfo.loadLabel(packageManager)?.toString() ?: packageName,
-                icon = icon,
-                banner = banner,
-                fadedIcon = loadFaded(iconKey, icon),
-                fadedBanner = loadFaded(bannerKey, banner),
-                isTvApp = isTvApp
-            )
+            val label = resolveInfo.loadLabel(packageManager)?.toString() ?: packageName
+            val custom = customArtwork.forName(packageName)
+            if (custom != null) {
+                // User art replaces banner AND icon, so it shows in either
+                // "Tile artwork" mode (icon mode falls back to the banner).
+                AppInfo(
+                    packageName = packageName,
+                    label = label,
+                    icon = null,
+                    banner = custom.image,
+                    fadedBanner = custom.faded,
+                    isTvApp = isTvApp
+                )
+            } else {
+                val icon = loadArtwork(iconKey) { resolveInfo.loadIcon(packageManager) }
+                val banner = loadArtwork(bannerKey) { loadBanner(resolveInfo) }
+                AppInfo(
+                    packageName = packageName,
+                    label = label,
+                    icon = icon,
+                    banner = banner,
+                    fadedIcon = loadFaded(iconKey, icon),
+                    fadedBanner = loadFaded(bannerKey, banner),
+                    isTvApp = isTvApp
+                )
+            }
         } catch (e: Exception) {
             null
         }

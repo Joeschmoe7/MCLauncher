@@ -576,6 +576,10 @@ private fun systemActionIconRes(packageName: String): Int? = when (packageName) 
     SystemActions.EDIT_ROWS -> R.drawable.ic_sys_edit_rows
     SystemActions.SETTINGS -> R.drawable.ic_sys_settings
     SystemActions.GOOGLE_TV_HOME -> R.drawable.ic_sys_google_tv_home
+    SystemActions.TV_SETTINGS -> R.drawable.ic_sys_tv_settings
+    SystemActions.NETWORK -> R.drawable.ic_sys_network
+    SystemActions.DISPLAY_SOUND -> R.drawable.ic_sys_display_sound
+    SystemActions.PAIR_ACCESSORY -> R.drawable.ic_sys_pair_accessory
     else -> null
 }
 

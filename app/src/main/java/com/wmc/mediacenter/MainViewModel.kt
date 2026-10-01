@@ -28,8 +28,11 @@ import com.wmc.mediacenter.screensaver.ScreensaverSelection
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
@@ -218,6 +221,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Synthetic tile for a shortcut card — borrows its target app's icon/banner so it reads as branded (e.g. Channels-styled "Movies" tile). */
     private fun shortcutAppInfo(shortcut: ShortcutConfig, byPackage: Map<String, AppInfo>): AppInfo {
+        // User art named after the card's label (e.g. Artwork/Movies.jpg)
+        // wins over the borrowed target-app artwork. A map read — the files
+        // were decoded on IO during discovery.
+        appRepository.customArtwork.forName(shortcut.label)?.let { art ->
+            return AppInfo(
+                packageName = shortcut.id,
+                label = shortcut.label,
+                icon = null,
+                banner = art.image,
+                fadedBanner = art.faded
+            )
+        }
         val targetApp = byPackage[shortcut.targetPackage]
         return AppInfo(
             packageName = shortcut.id,
@@ -567,6 +582,65 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 shortcuts = current.shortcuts + shortcut
             )
         }
+    }
+
+    /**
+     * Saves an edited shortcut card in place — same row, same position, same
+     * target app. Exactly one of [uri] or the extras should be set, as for
+     * [addShortcut]; switching between the two kinds clears the other.
+     */
+    fun updateShortcut(
+        id: String,
+        label: String,
+        uri: String? = null,
+        stringExtras: Map<String, String> = emptyMap(),
+        booleanExtras: Map<String, Boolean> = emptyMap()
+    ) {
+        val trimmedLabel = label.trim().ifEmpty { "Shortcut" }
+        val trimmedUri = uri?.trim()?.takeIf { it.isNotEmpty() }
+        if (trimmedUri == null && stringExtras.isEmpty() && booleanExtras.isEmpty()) return
+        editConfig { current ->
+            current.copy(shortcuts = current.shortcuts.map { shortcut ->
+                if (shortcut.id != id) {
+                    shortcut
+                } else {
+                    shortcut.copy(
+                        label = trimmedLabel,
+                        uri = trimmedUri,
+                        stringExtras = stringExtras,
+                        booleanExtras = booleanExtras
+                    )
+                }
+            })
+        }
+    }
+
+    // --- Custom artwork -------------------------------------------------------
+
+    /**
+     * Called whenever Home comes back to the foreground. Re-runs discovery
+     * only if the artwork folder changed since the last scan, so images
+     * dropped in over adb or a file manager appear without a restart — and an
+     * ordinary return to Home costs one directory listing, nothing more.
+     */
+    fun refreshIfArtworkChanged() {
+        viewModelScope.launch {
+            val changed = withContext(Dispatchers.IO) {
+                appRepository.customArtwork.currentStamp() != appRepository.customArtwork.lastStamp
+            }
+            if (changed) refreshApps()
+        }
+    }
+
+    // --- Home button ----------------------------------------------------------
+
+    private val _homePresses = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+    /** Fires when Home is pressed while MCLauncher is already in front. */
+    val homePresses: SharedFlow<Unit> = _homePresses.asSharedFlow()
+
+    fun onHomePressedWhileVisible() {
+        _homePresses.tryEmit(Unit)
     }
 
     // --- Auto-backup --------------------------------------------------------

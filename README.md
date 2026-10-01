@@ -29,6 +29,13 @@ the rest collapse to their titles. The highlight never moves — the tiles slide
 - Full D-pad navigation — there is no touchscreen on a TV box.
 - All Apps grid, Edit Rows screen, per-app hide, uninstall from the launcher, launch-an-app-on-
   startup, and an optional Recent row.
+- **Shortcut cards** that open an app straight to a section (e.g. Channels → Movies), editable
+  in place.
+- **Built-in cards** for the launcher's own screens and for Android's TV Settings pages
+  (Network, Display & Sound, pairing a remote or accessory).
+- **Custom artwork:** drop an image in a folder to replace any tile's picture.
+- Pressing **Home** while already on the launcher jumps back to the top row.
+- Rows and settings are **backed up automatically** after every change.
 - Everything persists to DataStore; no account, no cloud, no permissions beyond package queries.
 - An optional WMC-style **photo wall screensaver** — off by default, see below.
 
@@ -73,7 +80,7 @@ The script installs the APK if it finds one at `app/build/outputs/apk/release/ap
 |---|---|---|
 | `set-home-activity` | The Home button opening MCLauncher | It stays an ordinary app in the apps list |
 | `SYSTEM_ALERT_WINDOW` | Coming back by itself after a power cycle | Box boots to the stock launcher |
-| `MANAGE_EXTERNAL_STORAGE` | Backup/restore, screensaver photos | Backup fails; screensaver shows "no photos found" |
+| `MANAGE_EXTERNAL_STORAGE` | Backup/restore, screensaver photos, custom artwork | No backups; screensaver shows "no photos found"; tiles keep their normal artwork |
 | `WRITE_SECURE_SETTINGS` | MCLauncher selecting its own screensaver (**optional**) | You select it by hand — impossible on Google TV, see below |
 | Home watchdog | Staying Home after a wake-from-sleep | Google TV Home reappears |
 
@@ -181,6 +188,68 @@ Inside a folder on a USB drive you get two choices:
 
 ---
 
+## Customising
+
+Everything here is done from the remote, starting at the **Edit Rows** card (in the Settings
+row by default). Open a row to see its cards, then **+ Add apps** or **+ Add shortcut** at the
+end. Long-press OK on any card for Move left / Move right / Remove (and Edit, for shortcuts).
+
+### Shortcut cards
+
+A shortcut card opens an app at a particular place instead of its front screen.
+**+ Add shortcut** asks three things: which app it opens, the card's name, and the link.
+
+- **Apps with their own links** (e.g. Channels DVR): type the link, such as
+  `channels://navigate/Movies`. MCLauncher sends it as-is, so it has to be a link that app
+  understands — check the app's documentation.
+- **Jellyfin:** leave the link blank and the next step asks for a library's **ItemId** (from the
+  Jellyfin dashboard or its API) instead.
+
+To change a shortcut later, long-press it and choose **Edit shortcut**: the same steps,
+pre-filled, saved in place. The card borrows its app's artwork unless you give it its own (below).
+
+### Built-in cards
+
+**+ Add apps** lists every installed app followed by the built-in cards, which can go in any row:
+
+| Card | Opens |
+|---|---|
+| All Apps / Edit Rows / Settings | MCLauncher's own screens |
+| Google TV Home | the stock launcher (asks first) |
+| TV Settings | Android's main Settings screen |
+| Network | Network & Internet |
+| Display & Sound | Display & Sound |
+| Pair Accessory | the "pair a remote or accessory" screen |
+
+This is also how to put back a built-in card you removed. Edit Rows and Settings can't be
+removed when they're the last copy — they're the only way back into setup — and deleting the
+row that holds them moves them to another row.
+
+### Custom artwork
+
+Replace any tile's picture by putting an image in `/sdcard/MCLauncher/Artwork/`, named after
+what it replaces:
+
+- an **app**: its package name — e.g. `com.netflix.ninja.png` (list them with
+  `adb shell pm list packages`)
+- a **shortcut card**: its name — e.g. `Movies.jpg` for a card called "Movies"
+
+PNG, JPEG and WebP all work. Landscape images around 16:9 fit a tile best; other shapes are
+letterboxed, never cropped. Large photos are scaled down automatically. Changes show up the next
+time you return to Home — no restart. Delete the file to go back to the app's own artwork.
+Copy files in with `adb push picture.png /sdcard/MCLauncher/Artwork/<name>.png` or any file
+manager. Needs the same `MANAGE_EXTERNAL_STORAGE` grant as backup (see Install).
+
+### Backup
+
+Every change to your rows or settings is saved to `/sdcard/MCLauncher/mclauncher-backup.json` a
+few seconds later, so the file is always current. **Back up rows & settings** in Settings still
+writes it on demand, and **Restore from backup** reads it back. The backup lives outside the app,
+so it survives an uninstall; restoring before your apps are reinstalled is fine — rows keep their
+places and each app reappears as it's installed.
+
+---
+
 ## Build from source
 
 You need [Android Studio](https://developer.android.com/studio) — it bundles the JDK and SDK.
@@ -227,7 +296,8 @@ rows will look sparse — use the real box for anything about performance or rea
 app/src/main/java/com/wmc/mediacenter/
 ├── MainActivity.kt          launcher plumbing (CATEGORY_HOME, singleTask)
 ├── MainViewModel.kt         the single ViewModel; all state changes go through it
-├── apps/                    app discovery, artwork decode + faded-silhouette bake
+├── apps/                    app discovery, artwork decode + faded-silhouette bake,
+│                            custom artwork (CustomArtwork.kt), built-in cards (SystemActions.kt)
 ├── data/                    DataStore persistence, config + settings models
 └── ui/                      Compose screens; HomeScreen.kt is the interesting one
 ```

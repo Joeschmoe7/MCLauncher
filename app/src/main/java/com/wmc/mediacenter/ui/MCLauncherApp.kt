@@ -21,6 +21,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -67,6 +69,20 @@ fun MCLauncherApp(viewModel: MainViewModel) {
     var screen by remember { mutableStateOf<Screen>(Screen.Home) }
     var contextMenu by remember { mutableStateOf<ContextMenuState?>(null) }
     var dialog by remember { mutableStateOf<DialogState?>(null) }
+
+    // Home pressed while MCLauncher is already in front: back to the top of
+    // Home from anywhere — close dialogs and menus, leave any sub-screen, and
+    // rebuild Home fresh (via key() below) so every row is scrolled back to
+    // its start and first focus lands on the top row's first tile.
+    var homeResetCount by remember { mutableIntStateOf(0) }
+    LaunchedEffect(viewModel) {
+        viewModel.homePresses.collect {
+            dialog = null
+            contextMenu = null
+            screen = Screen.Home
+            homeResetCount++
+        }
+    }
 
     // F1 — All Apps / Add-apps only ever show hidden packages when the
     // "Show hidden apps" toggle is on. T1 — same for non-TV (sideloaded)
@@ -154,7 +170,7 @@ fun MCLauncherApp(viewModel: MainViewModel) {
             label = "screenZoom"
         ) { targetScreen ->
             when (targetScreen) {
-                Screen.Home -> HomeScreen(
+                Screen.Home -> key(homeResetCount) { HomeScreen(
                     uiState = uiState,
                     settings = settings,
                     recentApps = recentApps,
@@ -167,7 +183,7 @@ fun MCLauncherApp(viewModel: MainViewModel) {
                     },
                     onAppLaunched = viewModel::recordLaunch,
                     onRemoveRecent = viewModel::removeRecent
-                )
+                ) }
 
                 Screen.AllApps -> AllAppsScreen(
                     apps = visibleApps,
@@ -214,7 +230,10 @@ fun MCLauncherApp(viewModel: MainViewModel) {
                     val selected = row?.apps?.map { it.packageName }?.toSet().orEmpty()
                     AppPickerScreen(
                         rowName = row?.name ?: "",
-                        apps = visibleApps,
+                        // Installed apps, then every built-in card (All Apps,
+                        // TV Settings, Network...) - the only way to add a
+                        // settings card, or put back one that was removed.
+                        apps = visibleApps + SystemActions.ALL.mapNotNull(SystemActions::appInfoFor),
                         selectedPackages = selected,
                         showLabels = settings.showAppNames,
                         glassTiles = settings.glassTiles,
@@ -304,7 +323,17 @@ fun MCLauncherApp(viewModel: MainViewModel) {
             when (menu) {
                 is ContextMenuState.RowTileMenu -> ContextMenuOverlay(
                     title = menu.app.label,
-                    options = rowTileMenuOptions(menu, context, viewModel) { contextMenu = null },
+                    options = rowTileMenuOptions(
+                        menu = menu,
+                        context = context,
+                        viewModel = viewModel,
+                        shortcut = uiState.shortcutsById[menu.app.packageName],
+                        openEditShortcut = { shortcut ->
+                            contextMenu = null
+                            dialog = DialogState.EnterShortcutLabel(menu.rowId, shortcut.targetPackage, editing = shortcut)
+                        },
+                        dismiss = { contextMenu = null }
+                    ),
                     onDismiss = { contextMenu = null }
                 )
 
@@ -439,11 +468,11 @@ fun MCLauncherApp(viewModel: MainViewModel) {
 
                 is DialogState.EnterShortcutLabel -> TextInputDialog(
                     title = "Card name (e.g. Movies)",
-                    initialValue = "",
+                    initialValue = current.editing?.label.orEmpty(),
                     confirmLabel = "Next",
                     onConfirm = { label ->
                         if (label.isNotBlank()) {
-                            dialog = DialogState.EnterShortcutUri(current.rowId, current.targetPackage, label.trim())
+                            dialog = DialogState.EnterShortcutUri(current.rowId, current.targetPackage, label.trim(), current.editing)
                         }
                     },
                     onDismiss = { dialog = null }
@@ -451,14 +480,19 @@ fun MCLauncherApp(viewModel: MainViewModel) {
 
                 is DialogState.EnterShortcutUri -> TextInputDialog(
                     title = "Deep link URI (e.g. channels://navigate/Movies) — leave blank for Jellyfin-style",
-                    initialValue = "",
-                    confirmLabel = "Add",
+                    initialValue = current.editing?.uri.orEmpty(),
+                    confirmLabel = if (current.editing != null) "Save" else "Add",
                     onConfirm = { uri ->
                         if (uri.isNotBlank()) {
-                            viewModel.addShortcut(current.rowId, current.label, current.targetPackage, uri = uri.trim())
+                            val editing = current.editing
+                            if (editing != null) {
+                                viewModel.updateShortcut(editing.id, current.label, uri = uri.trim())
+                            } else {
+                                viewModel.addShortcut(current.rowId, current.label, current.targetPackage, uri = uri.trim())
+                            }
                             dialog = null
                         } else {
-                            dialog = DialogState.EnterShortcutItemId(current.rowId, current.targetPackage, current.label)
+                            dialog = DialogState.EnterShortcutItemId(current.rowId, current.targetPackage, current.label, current.editing)
                         }
                     },
                     onDismiss = { dialog = null }
@@ -466,17 +500,24 @@ fun MCLauncherApp(viewModel: MainViewModel) {
 
                 is DialogState.EnterShortcutItemId -> TextInputDialog(
                     title = "Jellyfin library ItemId (from Dashboard → Libraries, or the server API)",
-                    initialValue = "",
-                    confirmLabel = "Add",
+                    initialValue = current.editing?.stringExtras?.get("ItemId").orEmpty(),
+                    confirmLabel = if (current.editing != null) "Save" else "Add",
                     onConfirm = { itemId ->
                         if (itemId.isNotBlank()) {
-                            viewModel.addShortcut(
-                                rowId = current.rowId,
-                                label = current.label,
-                                targetPackage = current.targetPackage,
-                                stringExtras = mapOf("ItemId" to itemId.trim()),
-                                booleanExtras = mapOf("ItemIsUserView" to true)
-                            )
+                            val extras = mapOf("ItemId" to itemId.trim())
+                            val flags = mapOf("ItemIsUserView" to true)
+                            val editing = current.editing
+                            if (editing != null) {
+                                viewModel.updateShortcut(editing.id, current.label, stringExtras = extras, booleanExtras = flags)
+                            } else {
+                                viewModel.addShortcut(
+                                    rowId = current.rowId,
+                                    label = current.label,
+                                    targetPackage = current.targetPackage,
+                                    stringExtras = extras,
+                                    booleanExtras = flags
+                                )
+                            }
                         }
                         dialog = null
                     },
@@ -551,9 +592,17 @@ private fun rowTileMenuOptions(
     menu: ContextMenuState.RowTileMenu,
     context: Context,
     viewModel: MainViewModel,
+    shortcut: ShortcutConfig?,
+    openEditShortcut: (ShortcutConfig) -> Unit,
     dismiss: () -> Unit
 ): List<Pair<String, () -> Unit>> {
     val options = mutableListOf<Pair<String, () -> Unit>>()
+
+    // A shortcut card's name and link can be changed in place (the same
+    // dialogs as "+ Add shortcut", pre-filled) instead of remove-and-recreate.
+    if (shortcut != null) {
+        options += "Edit shortcut" to { openEditShortcut(shortcut) }
+    }
 
     if (menu.index > 0) {
         options += "Move left" to {
