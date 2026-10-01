@@ -13,6 +13,16 @@ import androidx.core.graphics.drawable.toBitmap
 private const val CATEGORY_LEANBACK_LAUNCHER = "android.intent.category.LEANBACK_LAUNCHER"
 
 /**
+ * The intent that opens [packageName], or null if it has no launchable
+ * activity. Tries the TV (LEANBACK_LAUNCHER) entry first, then the standard
+ * LAUNCHER one — `getLaunchIntentForPackage` alone only knows the latter, so
+ * TV-only apps (e.g. DIRECTV, `com.att.tv`) came back null and their tiles
+ * silently did nothing when pressed.
+ */
+fun PackageManager.launchIntentFor(packageName: String): Intent? =
+    getLeanbackLaunchIntentForPackage(packageName) ?: getLaunchIntentForPackage(packageName)
+
+/**
  * Discovers launchable apps for the home rows.
  *
  * Primary source is CATEGORY_LEANBACK_LAUNCHER (proper TV apps). We also

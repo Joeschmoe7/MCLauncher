@@ -54,6 +54,7 @@ import com.wmc.mediacenter.R
 import com.wmc.mediacenter.apps.AppInfo
 import com.wmc.mediacenter.apps.SystemActions
 import com.wmc.mediacenter.apps.TileFadedTint
+import com.wmc.mediacenter.apps.launchIntentFor
 import com.wmc.mediacenter.ui.theme.WmcAccentCyan
 import com.wmc.mediacenter.ui.theme.WmcTextPrimary
 import kotlin.math.max
@@ -569,7 +570,7 @@ private fun TileArtwork(app: AppInfo, inset: Boolean, preferIcons: Boolean = fal
 }
 
 private fun launchApp(context: Context, packageName: String, onLaunched: (String) -> Unit) {
-    val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName) ?: return
+    val launchIntent = context.packageManager.launchIntentFor(packageName) ?: return
     try {
         context.startActivity(launchIntent)
         onLaunched(packageName)

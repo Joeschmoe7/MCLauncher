@@ -31,6 +31,7 @@ import com.wmc.mediacenter.MainViewModel
 import com.wmc.mediacenter.RowUiState
 import com.wmc.mediacenter.apps.AppInfo
 import com.wmc.mediacenter.apps.SystemActions
+import com.wmc.mediacenter.apps.launchIntentFor
 import com.wmc.mediacenter.data.ShortcutConfig
 import com.wmc.mediacenter.screensaver.ScreensaverPhotoRepository
 import com.wmc.mediacenter.screensaver.ScreensaverSelection
@@ -88,7 +89,7 @@ fun MCLauncherApp(viewModel: MainViewModel) {
     // Home never relaunches it.
     LaunchedEffect(startupTarget) {
         val pkg = startupTarget ?: return@LaunchedEffect
-        context.packageManager.getLaunchIntentForPackage(pkg)?.let {
+        context.packageManager.launchIntentFor(pkg)?.let {
             runCatching { context.startActivity(it) }
         }
         viewModel.clearStartupLaunch()
